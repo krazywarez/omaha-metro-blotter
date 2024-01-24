@@ -15,7 +15,7 @@ df['year'] = df['date'].str[-4:]
 # Configure HTML layout
 app = Dash(__name__)
 app.layout = html.Div(children = [
-    html.H1(children="Omaha Police Invidents", style={"textAlign":"center"}),
+    html.H1(children="Omaha Police Incidents", style={"textAlign":"center"}),
     html.Div([
         html.H2(children="Totals per Category and Year", style={"textAlign":"center"}),
         dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="dropdown"),
