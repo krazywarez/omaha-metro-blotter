@@ -1,10 +1,10 @@
-from dash import Dash, html, dcc, callback, Output, Input
+from dash import Dash, html, dcc, callback, Output, Input, dash_table
 import plotly.express as px
 import pandas as pd
 import sqlite3
 
 # Connect to database and query all incidents
-connection = sqlite3.connect("../raw_data/ingress.db")
+connection = sqlite3.connect("./raw_data/ingress.db")
 cursor = connection.cursor()
 query = "SELECT * FROM incidents;"
 df = pd.read_sql_query(query, connection).sort_values(by="description")
@@ -18,36 +18,32 @@ app.layout = html.Div(children = [
     html.H1(children="Omaha Police Invidents", style={"textAlign":"center"}),
     html.Div([
         html.H2(children="Totals per Category and Year", style={"textAlign":"center"}),
-        dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="bar-dropdown"),
-        dcc.Dropdown(df.sort_values("year").year.unique(), "2023", id="bar-year-dropdown"),
-        dcc.Graph(id="bar-graph")
-    ]),
-    html.Div([
+        dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="dropdown"),
+        dcc.Dropdown(df.sort_values("year").year.unique(), "2023", id="year-dropdown"),
+        html.Hr(),
+        dash_table.DataTable(data=df.to_dict("records"), page_size=5, id="table"),
         html.H2(children="Map of Incidents per Category and Year", style={"textAlign":"center"}),
-        dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="map-dropdown"),
-        dcc.Dropdown(df.sort_values("year").year.unique(), "2023", id="map-year-dropdown"),
         dcc.Graph(id="map-graph")
     ])
 ])
 
-# Create bar graph
+# Create table
 @callback(
-    Output("bar-graph", "figure"),
-    Input("bar-dropdown", "value"),
-    Input("bar-year-dropdown", "value")
+    Output("table", "data"),
+    Input("dropdown", "value"),
+    Input("year-dropdown", "value")
 )
-def update_bar_graph(description, year):
+def update_table(description, year):
     dff = df[df.year == year]
-    dff = dff.value_counts(subset=["description"])
     dff = dff.reset_index()
     dff = dff[dff.description == description]
-    return px.bar(dff, x="description", y="count")
+    return dff.to_dict("records")
 
 # Create map
 @callback(
     Output("map-graph", "figure"),
-    Input("map-dropdown", "value"),
-    Input("map-year-dropdown", "value")
+    Input("dropdown", "value"),
+    Input("year-dropdown", "value")
 )
 def update_map(description, year):
     dff = df[df.year == year]
