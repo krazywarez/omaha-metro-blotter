@@ -10,3 +10,13 @@ Data from the Omaha police department, used to analyze and visualize statistics.
 - [ ] Analysis script
 - [~] Visualization script
 - [ ] Build API to connect to database?
+
+## API
+
+For the time being, you can explore the database via API with
+[sqlite2rest](https://github.com/nside/sqlite2rest):
+
+```sh
+pip3 install sqlite2rest
+sqlite2rest serve ./raw_data/ingress.db
+```

@@ -15,14 +15,15 @@ df['year'] = df['date'].str[-4:]
 # Configure HTML layout
 app = Dash(__name__)
 app.layout = html.Div(children = [
+    html.H1(children="Omaha Police Invidents", style={"textAlign":"center"}),
     html.Div([
-        html.H1(children="Omaha Police Invidents", style={"textAlign":"center"}),
+        html.H2(children="Totals per Category and Year", style={"textAlign":"center"}),
         dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="bar-dropdown"),
         dcc.Dropdown(df.sort_values("year").year.unique(), "2023", id="bar-year-dropdown"),
         dcc.Graph(id="bar-graph")
     ]),
     html.Div([
-        html.H2(children="Map Coordinates", style={"textAlign":"center"}),
+        html.H2(children="Map of Incidents per Category and Year", style={"textAlign":"center"}),
         dcc.Dropdown(df.sort_values("description").description.unique(), "INJURY", id="map-dropdown"),
         dcc.Dropdown(df.sort_values("year").year.unique(), "2023", id="map-year-dropdown"),
         dcc.Graph(id="map-graph")

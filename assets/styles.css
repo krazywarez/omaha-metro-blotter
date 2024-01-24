@@ -1,0 +1,8 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, helvetica, Cantarell, Ubuntu, roboto, noto, arial, sans-serif;
+}
+
+#_dash-app-content {
+    max-width: 80vw;
+    margin: 2rem auto;
+}

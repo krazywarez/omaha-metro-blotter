@@ -4,7 +4,7 @@ import sqlite3
 import os
 
 # Create the database file
-connection = sqlite3.connect('../raw_data/ingress.db')
+connection = sqlite3.connect('./raw_data/ingress.db')
 
 # Creating a cursor object to execute SQL queries
 cursor = connection.cursor()
