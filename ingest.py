@@ -4,7 +4,7 @@ import sqlite3
 import os
 
 # Create the database file
-connection = sqlite3.connect('./raw_data/ingress.db')
+connection = sqlite3.connect('./raw_data/test.db')
 
 # Creating a cursor object to execute SQL queries
 cursor = connection.cursor()
@@ -34,14 +34,14 @@ create_table = '''CREATE TABLE incidents(
 cursor.execute(create_table)
 
 # Point to the data directory
-directory = os.fsencode("../raw_data/")
+directory = os.fsencode("./raw_data/")
 
 # Loop through all raw data files
 for file in os.listdir(directory):
     filename = os.fsdecode(file)
     if filename.endswith(".csv"): 
         # Opening the file
-        file = open("../raw_data/" + filename)
+        file = open("./raw_data/" + filename)
 
         # Reading the contents of the file
         contents = csv.reader(file)
@@ -57,6 +57,10 @@ for file in os.listdir(directory):
         continue
     else:
         continue
+
+# Delete extra copies of the header row that were inserted
+delete_headers = "DELETE FROM incidents WHERE rb = 'RB Number'"
+cursor.execute(delete_headers)
 
 # Test query to see if the data loaded
 select_all = "SELECT * FROM incidents"
