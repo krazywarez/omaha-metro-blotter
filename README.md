@@ -1,4 +1,4 @@
-# Omaha Incidents
+# Omaha Crime Mapping & Analysis
 
 Data from the Omaha police department, used to analyze and visualize statistics.
 
@@ -22,4 +22,5 @@ sqlite2rest serve ./raw_data/ingress.db
 
 ## Screenshots
 
-![](./screenshots/dashboard.png)
+![](./screenshots/dashboard_01.png)
+![](./screenshots/dashboard_02.png)
