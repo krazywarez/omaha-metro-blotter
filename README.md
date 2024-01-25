@@ -5,8 +5,8 @@ Data from the Omaha police department, used to analyze and visualize statistics.
 ## TODO
 
 - [x] Import script
-- [ ] Remove duplicate instances of headers being inserted into the database as records
-- [ ] Explore & analyze the data 
+- [x] Remove duplicate instances of headers being inserted into the database as records
+- [ ] Explore & analyze the data
 - [ ] Plotly Dash visualizations
 - [ ] Build API to connect to database?
 
