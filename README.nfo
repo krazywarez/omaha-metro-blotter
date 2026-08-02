@@ -1,0 +1,28 @@
+┌──────────────────────────────────────────────────────────────┐
+│  O M A H A   I N C I D E N T S             [ KRZ ]   krz.sh  │
+└──────────────────────────────────────────────────────────────┘
+
+WHAT
+  crime data from the omaha police department, for analysis and
+  visualization.
+
+API
+  explore the database over http with sqlite2rest:
+
+      pip3 install sqlite2rest
+      sqlite2rest serve ./raw_data/ingress.db
+
+TODO
+  - import script (done)
+  - drop duplicate header rows (done)
+  - explore and analyze the data
+  - plotly dash visualizations
+  - api to the database
+
+SCREENSHOTS
+  screenshots/dashboard_01.png
+  screenshots/dashboard_02.png
+
+┌──────────────────────────────────────────────────────────────┐
+│  krz.sh                                                      │
+└──────────────────────────────────────────────────────────────┘
