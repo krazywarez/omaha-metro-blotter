@@ -1,11 +1,12 @@
 ┌──────────────────────────────────────────────────────────────┐
-│  O M A H A   I N C I D E N T S             [ KRZ ]   krz.sh  │
+│  O M A H A   M E T R O   B L O T T E R     [ KRZ ]   krz.sh  │
 └──────────────────────────────────────────────────────────────┘
 
 WHAT
-  police activity across the omaha metro, pulled from the agencies'
-  own feeds and joined against alpr camera locations from
-  openstreetmap.
+  an archive of police activity and alpr surveillance across the
+  omaha metro, pulled from the agencies' own feeds. sarpy county,
+  council bluffs and the flock portals all serve rolling windows and
+  delete what falls outside them; this keeps it.
 
 COVERAGE
   omaha pd                dcgis arcgis view, 2022-01-01 onward,
@@ -42,7 +43,7 @@ USE
       .venv/bin/python ingest.py --full        # first run, backfill
       .venv/bin/python ingest.py               # daily, last 30 days
       .venv/bin/python ingest.py cbpd sarpy    # one source at a time
-      .venv/bin/python ingest.py opd_csv       # 2015-2023 csv archive
+      .venv/bin/python ingest.py opd_archive   # omaha 2015-2021 backfill
       .venv/bin/python app.py
 
 SITE
@@ -91,7 +92,7 @@ ARCHIVE
 
   to run the pull locally instead:
 
-      0 6 * * *  cd /path/to/omaha-incidents && .venv/bin/python ingest.py
+      0 6 * * *  cd /path/to/omaha-metro-blotter && .venv/bin/python ingest.py
 
 RAW
   raw_records keeps the feed's own json for every version of every

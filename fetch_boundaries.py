@@ -38,7 +38,7 @@ def fetch(layer):
               "maxAllowableOffset": TOLERANCE, "f": "geojson"}
     url = layer["url"] + "/query?" + urllib.parse.urlencode(params)
     # Sarpy's MapServer 403s the default Python-urllib agent
-    req = urllib.request.Request(url, headers={"User-Agent": "omaha-incidents/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "omaha-metro-blotter/1.0"})
     with urllib.request.urlopen(req, timeout=120, context=CTX) as r:
         return json.load(r)
 
