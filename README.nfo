@@ -25,8 +25,14 @@ COVERAGE
   ralston pd              no machine-readable feed. absent.
 
   alpr cameras            openstreetmap via overpass, the same data
-                          deflock renders. 168 nodes in the metro
+                          deflock renders. 169 nodes in the metro
                           bbox. odbl, attribution required.
+
+  alpr searches           flock transparency portals. council bluffs
+                          publishes a downloadable 30-day search
+                          audit; sarpy county and douglas county
+                          publish counts but no export. omaha pd has
+                          no portal.
 
 SETUP
       uv venv .venv
@@ -77,6 +83,31 @@ RAW
   it costs about 0.7 mb gzipped a day and roughly triples the
   database: 20 mb published without it, 52 mb with. 319 records
   predate it and their raw is gone; the feeds no longer serve them.
+
+FLOCK SEARCH AUDIT
+  transparency.flocksafety.com/<slug> publishes camera counts, plate
+  reads, search counts and each agency's sharing network. council
+  bluffs also offers the search audit itself as a csv: one row per
+  search, with a timestamp, how many camera networks it reached and
+  a free-text reason.
+
+  cloudflare serves a challenge to every non-browser client, so
+  ingest.py cannot fetch it. collecting is manual: open the portal,
+  "download csv", save it as raw_data/flock/<slug>_<date>.csv and
+  commit. loading is not manual -- the flock source runs in the daily
+  job and picks up whatever is committed. search ids are stable
+  uuids, so overlapping exports dedupe.
+
+  the portals keep 30 days. miss a month and that month is gone.
+
+  as of the first export, 100 of 442 council bluffs searches carried
+  any reason at all, against an access policy stating that all access
+  requires one. userid is redacted upstream, so no search can be
+  attributed to a person. the median search reached 466 camera
+  networks; the largest reached 6072.
+
+  all three portals list traffic enforcement under prohibited uses,
+  which is what the camera-proximity panel is measuring against.
 
 AMENDMENTS
   agencies edit records after publishing them: a disposition changes,
