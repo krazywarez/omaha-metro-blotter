@@ -89,6 +89,24 @@ CREATE TABLE IF NOT EXISTS raw_records (
     PRIMARY KEY (source, source_key, digest)
 );
 
+-- Searches run against an agency's ALPR network, from its Flock transparency
+-- portal. The portal serves a rolling 30 days and the export is already the
+-- whole record: no field here is derived, so there is no separate raw copy.
+-- userId is redacted to *** by Flock, so searches cannot be attributed to an
+-- officer, and most carry no reason despite the portals' stated access policy.
+CREATE TABLE IF NOT EXISTS alpr_searches (
+    agency        TEXT NOT NULL,  -- portal slug the export came from
+    search_id     TEXT NOT NULL,  -- Flock's own UUID, stable across exports
+    searched_at   TEXT NOT NULL,  -- ISO 8601 UTC, as published
+    network_count INTEGER,        -- camera networks the search reached across
+    reason        TEXT,           -- free text, blank on most searches
+    user_id       TEXT,           -- redacted upstream
+    imported_at   TEXT NOT NULL,
+    PRIMARY KEY (agency, search_id)
+);
+
+CREATE INDEX IF NOT EXISTS searches_when ON alpr_searches (searched_at);
+
 -- ALPR cameras from OpenStreetMap (ODbL). first_seen/last_seen track when a node
 -- entered and was last present in the Overpass result, so cameras that appear or
 -- are removed are visible over time.
