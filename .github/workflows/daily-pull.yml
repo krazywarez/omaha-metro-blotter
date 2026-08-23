@@ -23,6 +23,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: archive
@@ -192,6 +194,28 @@ jobs:
           fi
           echo "all feeds current"
 
+      # The Flock export is the one thing here that cannot be automated: the
+      # portal challenges every non-browser client. Its window is 30 days, so
+      # this fails at 27 while there is still time to act, not afterwards.
+      - name: Check the Flock export is current
+        run: |
+          age=$(sqlite3 -noheader "$DB" "
+            SELECT CAST(julianday('now') - julianday(MAX(imported_at)) AS INT)
+              FROM alpr_searches" 2>/dev/null || echo "")
+          if [ -z "$age" ] || [ "$age" = "" ]; then
+            echo "no Flock export on file yet"; exit 0
+          fi
+          echo "newest Flock export imported $age days ago"
+          if [ "$age" -ge 27 ]; then
+            echo "::error::Flock search audit is $age days old and the portal only" \
+                 "keeps 30. Download it from" \
+                 "https://transparency.flocksafety.com/council-bluffs-ia-pd and commit" \
+                 "it to raw_data/flock/ before the window closes."
+            exit 1
+          elif [ "$age" -ge 21 ]; then
+            echo "::warning::Flock search audit is $age days old; refresh it soon."
+          fi
+
       - name: Summary
         if: always()
         run: |
@@ -203,3 +227,38 @@ jobs:
                  { printf "| %s | %s | %s |\n", $1, ($1 in was ? was[$1] : 0), $2 }' \
                 before.txt after.txt
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Separate job: the site needs pandas and numpy, and a Pages failure must not
+  # put the archive at risk.
+  site:
+    needs: pull
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Fetch the published archive
+        run: |
+          gh release download "$TAG" --pattern metro.db.gz --dir .
+          mkdir -p raw_data
+          gunzip -c metro.db.gz > "$DB"
+
+      - run: python build_site.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
