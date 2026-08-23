@@ -18,6 +18,7 @@ carries its own literal timezone and page size.
 
 import argparse
 import csv
+import hashlib
 import json
 import sqlite3
 import ssl
@@ -158,20 +159,67 @@ def local_iso(epoch_ms):
     return dt.astimezone(LOCAL).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+# The order every row tuple is built in, and the order digest() hashes.
+COLUMNS = ("source", "source_key", "agency", "case_id", "occurred_at", "category",
+           "call_type", "disposition", "offense_desc", "is_stop", "address",
+           "lat", "lon")
+PAYLOAD = COLUMNS[2:]  # everything the feed can change; the first two are the key
+
+
+# Columns whose SQLite affinity rewrites what the feed sent: a JSON lon of -96
+# arrives as int and comes back out of a REAL column as -96.0. Hashing the raw
+# value would mark such a record amended on every run forever, so coerce to the
+# stored representation first.
+REAL_FIELDS = {"lat", "lon"}
+INT_FIELDS = {"is_stop"}
+
+
+def digest(values):
+    """Hash of a record's payload. Feeds amend records after publishing them, so
+    this is what tells an unchanged record from a genuinely new version. Must
+    give the same answer for a value going into the database and coming back."""
+    parts = []
+    for name, v in zip(PAYLOAD, values):
+        if v is None:
+            parts.append("")
+        elif name in REAL_FIELDS:
+            parts.append(repr(float(v)))
+        elif name in INT_FIELDS:
+            parts.append(str(int(v)))
+        else:
+            parts.append(str(v))
+    return hashlib.blake2b("\x1f".join(parts).encode(), digest_size=8).hexdigest()
+
+
 def upsert(conn, rows):
-    conn.executemany(
-        """INSERT INTO incidents
-           (source, source_key, agency, case_id, occurred_at, category,
-            call_type, disposition, offense_desc, is_stop, address, lat, lon)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON CONFLICT(source, source_key) DO UPDATE SET
-             agency=excluded.agency, case_id=excluded.case_id,
-             occurred_at=excluded.occurred_at, category=excluded.category,
-             call_type=excluded.call_type, disposition=excluded.disposition,
-             offense_desc=excluded.offense_desc, is_stop=excluded.is_stop,
-             address=excluded.address, lat=excluded.lat, lon=excluded.lon""",
-        rows)
-    return len(rows)
+    """Insert records not seen before; file a changed record as an amendment.
+
+    Nothing in incidents is ever updated. A record whose payload differs from
+    the one on file is appended to incident_amendments, so the version the
+    agency published first stays readable next to what it published later."""
+    now = datetime.now(LOCAL).strftime("%Y-%m-%dT%H:%M:%S")
+    marks = ",".join("?" * (len(COLUMNS) + 1))
+    staged = [r + (digest(r[2:]),) for r in rows]
+
+    conn.execute("DROP TABLE IF EXISTS temp.incoming")
+    conn.execute(f"CREATE TEMP TABLE incoming ({','.join(COLUMNS)}, digest)")
+    conn.executemany(f"INSERT INTO temp.incoming VALUES ({marks})", staged)
+    conn.execute("CREATE INDEX temp.incoming_key ON incoming (source, source_key)")
+
+    cols = ",".join(COLUMNS)
+    conn.execute(
+        f"""INSERT OR IGNORE INTO incidents ({cols}, digest, first_seen)
+            SELECT {cols}, digest, ? FROM temp.incoming""", (now,))
+    amended = conn.execute(
+        f"""INSERT OR IGNORE INTO incident_amendments ({cols}, digest, seen_at)
+            SELECT i.{', i.'.join(COLUMNS)}, i.digest, ?
+            FROM temp.incoming i
+            JOIN incidents o
+              ON o.source = i.source AND o.source_key = i.source_key
+            WHERE o.digest <> i.digest""", (now,)).rowcount
+
+    conn.execute("DROP TABLE temp.incoming")
+    return len(rows), amended
 
 
 def ingest_opd(conn, since):
@@ -206,10 +254,10 @@ def ingest_sarpy(conn, since):
                      a.get("StatuteDesc"),
                      int(a.get("Category") == SARPY_STOP_CATEGORY),
                      a.get("BlkAddress"), g.get("y"), g.get("x")))
-    n = upsert(conn, rows)
+    result = upsert(conn, rows)
     if unmapped:
         print(f"  unmapped IncidentId prefixes: {sorted(unmapped)}")
-    return n
+    return result
 
 
 def ingest_cbpd(conn, since):
@@ -278,19 +326,37 @@ def ingest_alpr(conn, _since):
              direction=excluded.direction, last_seen=excluded.last_seen,
              tags=excluded.tags""",
         rows)
-    return len(rows)
+    return len(rows), 0
 
 
 def migrate(conn):
     """Add columns introduced after a database was first built. Runs before
-    schema.sql so its indexes can reference the new columns."""
+    schema.sql so its views and indexes can reference the new columns."""
     have = {r[1] for r in conn.execute("PRAGMA table_info(incidents)")}
-    if have and "is_stop" not in have:
+    if not have:
+        return
+
+    if "is_stop" not in have:
         conn.execute("ALTER TABLE incidents ADD COLUMN is_stop INTEGER NOT NULL"
                      " DEFAULT 0")
         conn.execute("UPDATE incidents SET is_stop = 1 WHERE category = ?",
                      (SARPY_STOP_CATEGORY,))
         conn.commit()
+
+    if "digest" not in have:
+        # Backfill from the stored values, using the same function ingest uses,
+        # so the next run sees the existing rows as unchanged rather than
+        # amending all of them.
+        conn.execute("ALTER TABLE incidents ADD COLUMN digest TEXT")
+        conn.execute("ALTER TABLE incidents ADD COLUMN first_seen TEXT")
+        payload = ", ".join(PAYLOAD)
+        rows = conn.execute(
+            f"SELECT source, source_key, {payload} FROM incidents").fetchall()
+        conn.executemany(
+            "UPDATE incidents SET digest = ? WHERE source = ? AND source_key = ?",
+            [(digest(r[2:]), r[0], r[1]) for r in rows])
+        conn.commit()
+        print(f"  migrated: digested {len(rows)} existing rows")
 
 
 SOURCES = {
@@ -324,9 +390,10 @@ def main():
     for name in sources:
         start = time.monotonic()
         print(f"  {name}: pulling...")
-        n = SOURCES[name](conn, since)
+        seen, amended = SOURCES[name](conn, since)
         conn.commit()
-        print(f"  {name}: {n} rows in {time.monotonic() - start:.1f}s")
+        note = f", {amended} amended" if amended else ""
+        print(f"  {name}: {seen} rows{note} in {time.monotonic() - start:.1f}s")
     conn.close()
 
 

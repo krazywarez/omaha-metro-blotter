@@ -131,6 +131,7 @@ def update_kpis(agencies, categories, start, end, _theme):
         ("Vehicle stops", f"{len(stops):,}"),
         ("Stops per day", rate),
         ("Agencies", f"{df['agency'].nunique()}"),
+        ("Amended since filing", f"{int(df['amended'].sum()):,}"),
     ]
     return [html.Div(className="kpi", children=[html.Span(v, className="kpi-value"),
                                                 html.Span(k, className="kpi-label")])

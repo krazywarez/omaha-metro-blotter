@@ -1,4 +1,8 @@
-"""Queries behind the dashboard: agency activity and distance to the nearest ALPR."""
+"""Queries behind the dashboard: agency activity and distance to the nearest ALPR.
+
+Reads incidents_current, the newest known version of each record. The originals
+stay in incidents and every superseded version in incident_amendments, so a
+disposition an agency changed after the fact is still recoverable."""
 
 import sqlite3
 from pathlib import Path
@@ -36,8 +40,8 @@ def load_incidents(conn, agencies=None, start=None, end=None, categories=None):
         params.append(f"{end}T23:59:59")
     df = pd.read_sql_query(
         f"""SELECT source, agency, case_id, occurred_at, category, call_type,
-                   disposition, offense_desc, is_stop, address, lat, lon
-            FROM incidents WHERE {' AND '.join(where)}""",
+                   disposition, offense_desc, is_stop, address, lat, lon, amended
+            FROM incidents_current WHERE {' AND '.join(where)}""",
         conn, params=params)
     df["occurred_at"] = pd.to_datetime(df["occurred_at"])
     return df
@@ -126,21 +130,49 @@ def camera_proximity(df, cameras, bin_m=200, max_m=2000):
     return g
 
 
+def amendment_history(conn, source, source_key):
+    """Every version of one record, oldest first."""
+    return pd.read_sql_query(
+        """SELECT 'original' AS version, occurred_at, category, call_type,
+                  disposition, is_stop, address, first_seen AS seen_at
+             FROM incidents WHERE source = ? AND source_key = ?
+           UNION ALL
+           SELECT 'amended', occurred_at, category, call_type,
+                  disposition, is_stop, address, seen_at
+             FROM incident_amendments WHERE source = ? AND source_key = ?
+           ORDER BY seen_at""",
+        conn, params=[source, source_key, source, source_key])
+
+
+def changed_stop_outcomes(conn):
+    """Stops whose disposition the agency changed after first publishing it."""
+    return pd.read_sql_query(
+        """SELECT o.agency, o.case_id, o.occurred_at,
+                  o.disposition AS first_published,
+                  a.disposition AS later_published, a.seen_at
+             FROM incident_amendments a
+             JOIN incidents o
+               ON o.source = a.source AND o.source_key = a.source_key
+            WHERE o.is_stop = 1
+              AND IFNULL(a.disposition, '') <> IFNULL(o.disposition, '')
+            ORDER BY a.seen_at DESC""", conn)
+
+
 def agency_options(conn):
     rows = conn.execute(
-        "SELECT agency, COUNT(*) FROM incidents GROUP BY agency ORDER BY 2 DESC"
-    ).fetchall()
+        "SELECT agency, COUNT(*) FROM incidents_current GROUP BY agency"
+        " ORDER BY 2 DESC").fetchall()
     return [a for a, _ in rows]
 
 
 def category_options(conn):
     rows = conn.execute(
-        "SELECT category, COUNT(*) FROM incidents WHERE category IS NOT NULL"
-        " GROUP BY category ORDER BY 2 DESC").fetchall()
+        "SELECT category, COUNT(*) FROM incidents_current"
+        " WHERE category IS NOT NULL GROUP BY category ORDER BY 2 DESC").fetchall()
     return [c for c, _ in rows]
 
 
 def date_bounds(conn):
     lo, hi = conn.execute(
-        "SELECT MIN(occurred_at), MAX(occurred_at) FROM incidents").fetchone()
+        "SELECT MIN(occurred_at), MAX(occurred_at) FROM incidents_current").fetchone()
     return lo[:10], hi[:10]

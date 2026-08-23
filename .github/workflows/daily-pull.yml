@@ -69,6 +69,10 @@ jobs:
             sqlite3 -noheader -separator ' ' "$DB" \
               "SELECT source, COUNT(*) FROM incidents GROUP BY source ORDER BY source" \
               > before.txt
+            # absent until the amendment migration has run against this archive
+            sqlite3 -noheader -separator ' ' "$DB" \
+              "SELECT source || '+amend', COUNT(*) FROM incident_amendments
+               GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
           fi
           cat before.txt
 
@@ -85,6 +89,9 @@ jobs:
           sqlite3 -noheader -separator ' ' "$DB" \
             "SELECT source, COUNT(*) FROM incidents GROUP BY source ORDER BY source" \
             > after.txt
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT source || '+amend', COUNT(*) FROM incident_amendments
+             GROUP BY source ORDER BY source" >> after.txt
           cat after.txt
           test -s after.txt || { echo "::error::archive is empty"; exit 1; }
           # Keyed on FILENAME, not NR == FNR: before.txt is empty on a bootstrap
@@ -101,6 +108,22 @@ jobs:
                  exit bad
                }' before.txt after.txt
 
+          # An amendment identical to its original means the digest drifted
+          # against what SQLite stores, and every run would file the same
+          # phantom again. Cheap to check, silent and cumulative if it happens.
+          phantom=$(sqlite3 -noheader "$DB" "
+            SELECT COUNT(*) FROM incident_amendments a
+            JOIN incidents o ON o.source = a.source AND o.source_key = a.source_key
+            WHERE a.agency IS o.agency AND a.case_id IS o.case_id
+              AND a.occurred_at IS o.occurred_at AND a.category IS o.category
+              AND a.call_type IS o.call_type AND a.disposition IS o.disposition
+              AND a.offense_desc IS o.offense_desc AND a.is_stop IS o.is_stop
+              AND a.address IS o.address AND a.lat IS o.lat AND a.lon IS o.lon")
+          if [ "$phantom" -ne 0 ]; then
+            echo "::error::$phantom amendments are identical to their original"
+            exit 1
+          fi
+
       - name: Publish archive
         run: |
           sqlite3 "$DB" "VACUUM;"
@@ -114,6 +137,11 @@ jobs:
             echo "so this holds records their own feeds no longer serve."
             echo
             echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Schema: schema.sql."
+            echo
+            echo "incidents holds each record as first published; every later"
+            echo "version the feed served is a row in incident_amendments"
+            echo "($(sqlite3 -noheader "$DB" 'SELECT COUNT(*) FROM incident_amendments') so far)."
+            echo "incidents_current is the newest version of each."
             echo
             echo '```'
             sqlite3 -header -column "$DB" \

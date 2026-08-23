@@ -61,6 +61,26 @@ ARCHIVE
 
       0 6 * * *  cd /path/to/omaha-incidents && .venv/bin/python ingest.py
 
+AMENDMENTS
+  agencies edit records after publishing them: a disposition changes,
+  a case reopens, a record is withdrawn. nothing in the incidents
+  table is ever updated, so what an agency published first stays
+  readable. every later version the feed serves lands in
+  incident_amendments, and incidents_current is the newest version of
+  each record. analysis.changed_stop_outcomes() lists stops whose
+  disposition changed after filing.
+
+  a version is keyed on the hash of its payload, so a record that
+  reverts to a payload already on file is not recorded again. this
+  holds the set of distinct states observed, not a strict timeline.
+
+  the hash has to survive a round trip through sqlite. a lon of -96
+  arrives from the feed as a json int and comes back out of a REAL
+  column as -96.0, so lat, lon and is_stop are coerced before
+  hashing. get this wrong and every affected record is filed as
+  amended on every run, forever. the workflow fails if any amendment
+  is byte-identical to its original.
+
 NOTES
   all three arcgis services return utc epochs; their where-clause
   literals do not agree (opd and council bluffs utc, sarpy central).
