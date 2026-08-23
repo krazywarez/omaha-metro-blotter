@@ -3,25 +3,91 @@
 └──────────────────────────────────────────────────────────────┘
 
 WHAT
-  crime data from the omaha police department, for analysis and
-  visualization.
+  police activity across the omaha metro, pulled from the agencies'
+  own feeds and joined against alpr camera locations from
+  openstreetmap.
 
-API
-  explore the database over http with sqlite2rest:
+COVERAGE
+  omaha pd                dcgis arcgis view, 2022-01-01 onward,
+                          nibrs offence records, updated daily.
+                          no stop or disposition data.
+  bellevue pd             sarpy county publiccrimemap, cad calls
+  papillion pd            for service with stop type, disposition
+  la vista pd             and category. rolling 12-month window:
+  sarpy county so         records age out of the feed, so the local
+                          archive is the only long-term copy. gretna
+                          and springfield appear as fire only; their
+                          police departments do not report to it.
+  council bluffs pd       cbpd public cfs feed, refreshed every ten
+                          minutes, rolling 12-month window. stop
+                          type, disposition, priority, response time.
+                          street addresses withheld; points exact.
+  ralston pd              no machine-readable feed. absent.
 
-      pip3 install sqlite2rest
-      sqlite2rest serve ./raw_data/ingress.db
+  alpr cameras            openstreetmap via overpass, the same data
+                          deflock renders. 168 nodes in the metro
+                          bbox. odbl, attribution required.
 
-TODO
-  - import script (done)
-  - drop duplicate header rows (done)
-  - explore and analyze the data
-  - plotly dash visualizations
-  - api to the database
+SETUP
+      uv venv .venv
+      uv pip install --python .venv/bin/python -r requirements.txt
+
+USE
+      .venv/bin/python ingest.py --full        # first run, backfill
+      .venv/bin/python ingest.py               # daily, last 30 days
+      .venv/bin/python ingest.py cbpd sarpy    # one source at a time
+      .venv/bin/python ingest.py opd_csv       # 2015-2023 csv archive
+      .venv/bin/python app.py
+
+ARCHIVE
+  .github/workflows/daily-pull.yml runs the pull at 11:17 utc and
+  keeps the database as metro.db.gz on the "archive" release, so the
+  archive does not depend on any one machine. each run restores that
+  asset, pulls, refuses to publish if any source came back with fewer
+  rows than it started with, then uploads and fails loudly if a feed
+  has not moved in seven days.
+
+  first run: trigger it manually with bootstrap enabled, which pulls
+  every feed in full and creates the release. after that the restore
+  step is mandatory -- a bootstrap over a live archive throws away
+  whatever has already aged out of the sarpy and council bluffs
+  feeds.
+
+  github disables scheduled workflows after 60 days without repo
+  activity, and emails first. that is the most likely way this stops
+  quietly.
+
+  to run the pull locally instead:
+
+      0 6 * * *  cd /path/to/omaha-incidents && .venv/bin/python ingest.py
+
+NOTES
+  all three arcgis services return utc epochs; their where-clause
+  literals do not agree (opd and council bluffs utc, sarpy central).
+  ingest.py stores occurred_at in local time.
+
+  each feed has its own taxonomy and none of them are comparable, so
+  ingest.py derives one cross-agency flag, is_stop, per source. stop
+  outcomes compare citation and arrest rate by substring, which is
+  all the two disposition vocabularies support: an agency that
+  records warnings less thoroughly shows a higher citation rate for
+  that reason alone.
+
+  colour scheme follows prefers-color-scheme. plotly writes colours
+  into the figure, so assets/theme.js reports the media query into a
+  store and app.py builds each figure from it. restyling after the
+  fact does not work: swapping a maplibre basemap at runtime leaves
+  it rebuilding with no data layers.
+
+  the camera-proximity panel compares stops against a non-stop
+  baseline. cameras and stops both concentrate on arterials, so a
+  gap between the curves is a starting point, not a finding.
+
+  raw_data/ingress.db is the old 2015-2023 sqlite build. nothing
+  reads it any more.
 
 SCREENSHOTS
-  screenshots/dashboard_01.png
-  screenshots/dashboard_02.png
+  screenshots/*.png are from the previous 2015-2023 dashboard.
 
 ┌──────────────────────────────────────────────────────────────┐
 │  krz.sh                                                      │

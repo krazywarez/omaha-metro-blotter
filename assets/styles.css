@@ -1,4 +1,37 @@
+:root {
+    --bg: #fff;
+    --fg: #111;
+    --muted: #555;
+    --border: #ddd;
+    --panel: #fafafa;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #14161a;
+        --fg: #e8e8ea;
+        --muted: #9aa0a6;
+        --border: #333840;
+        --panel: #1b1e24;
+
+        /* Dash 3 ships light-only values for its component design tokens. */
+        --Dash-Text-Primary: #e8e8ea;
+        --Dash-Text-Strong: #f2f2f4;
+        --Dash-Text-Weak: #9aa0a6;
+        --Dash-Text-Disabled: #6b7178;
+        --Dash-Stroke-Strong: rgba(232, 232, 234, 0.45);
+        --Dash-Stroke-Weak: rgba(232, 232, 234, 0.15);
+        --Dash-Fill-Inverse-Strong: #1b1e24;
+        --Dash-Fill-Interactive-Weak: rgba(255, 255, 255, 0.06);
+        --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.06);
+        --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.1);
+        --Dash-Fill-Disabled: rgba(255, 255, 255, 0.1);
+    }
+}
+
 body {
+    background: var(--bg);
+    color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, helvetica, Cantarell, Ubuntu, roboto, noto, arial, sans-serif;
     max-width: 80vw;
     margin: 2rem auto;
@@ -14,21 +47,73 @@ body {
     max-width: 100%;
 }
 
-.flex {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
+.subtitle {
+    color: var(--muted);
+    margin-top: -0.5rem;
 }
 
-.flex p {
-    margin-right: 1rem;
-    flex-shrink: 0;
+.controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
 }
 
-.flex .dash-dropdown {
-    width: 100%;
+.controls label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
 }
 
-.flex #date-picker-range {
-    width: 100%;
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.kpi {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+}
+
+.kpi-value {
+    display: block;
+    font-size: 1.6rem;
+    font-weight: 600;
+}
+
+.kpi-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 1rem;
+}
+
+.row .half {
+    min-width: 0;
+}
+
+/* DataTable paints its own colours instead of reading the tokens above. */
+@media (prefers-color-scheme: dark) {
+    .dash-spreadsheet-inner td,
+    .dash-spreadsheet-inner th,
+    .dash-spreadsheet-inner td.dash-cell,
+    .dash-spreadsheet-inner th.dash-header {
+        background-color: var(--panel) !important;
+        border-color: var(--border) !important;
+        color: var(--fg) !important;
+    }
+
+    .dash-spreadsheet-menu,
+    .dash-spreadsheet-container {
+        color: var(--fg);
+    }
 }

@@ -1,0 +1,5 @@
+-r requirements-ingest.txt
+dash>=3.0
+numpy>=2.0
+pandas>=2.2
+plotly>=6.0
