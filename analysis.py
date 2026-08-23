@@ -113,10 +113,20 @@ def stop_outcomes(df):
 def camera_proximity(df, cameras, bin_m=200, max_m=2000):
     """Share of stops vs other incidents falling in each distance band.
 
-    Both series are normalised, so a gap between them means stops cluster
-    differently around cameras than the rest of the call volume does. It is not
-    evidence of causation: cameras and stops both concentrate on arterials."""
+    The baseline is drawn only from agencies that report stops. Comparing stops
+    against every incident in the archive instead compares Sarpy and Council
+    Bluffs stops with a baseline that is mostly Omaha, a city reporting no stops
+    at all, and the geography alone then makes stops look far closer to cameras
+    than they are: 2.6x within 200 m across all agencies, 1.2x within the ones
+    actually being measured.
+
+    Even restricted this way it is not evidence of causation. Cameras and
+    enforcement both concentrate on arterials."""
     if df.empty or cameras.empty:
+        return pd.DataFrame(columns=["distance_m", "kind", "share"])
+    reporting = df.loc[df["is_stop"] == 1, "agency"].unique()
+    df = df[df["agency"].isin(reporting)]
+    if df.empty:
         return pd.DataFrame(columns=["distance_m", "kind", "share"])
     d = df.assign(dist=nearest_camera_m(df, cameras))
     d = d[d["dist"] <= max_m]

@@ -14,8 +14,11 @@ Sources:
           raw_data/flock/<portal-slug>_<date>.csv and this reads what is there.
           The portals keep a rolling 30 days, so a gap longer than that is
           permanent.
-  opd_csv One-time backfill of raw_data/Incidents_*.csv (2015-2023). Statute text
-          only, no NIBRS category.
+  opd_archive
+          OPD's own yearly incident CSVs, 2015-2021. The ArcGIS view only goes
+          back to 2022-01-01, so this is the only route to the earlier years,
+          and it carries the statute description rather than a NIBRS category.
+          Reported crimes only: no stops, no dispositions.
 
 All three ArcGIS services return UTC epochs. Their WHERE literals do not agree:
 OPD and Council Bluffs use UTC, Sarpy uses America/Chicago, so each source
@@ -96,6 +99,16 @@ SARPY_AGENCIES = {
 # The feed's other vehicle category, "Traffic", is crashes, parking and DUI
 # calls -- reactive, not officer-initiated.
 SARPY_STOP_CATEGORY = "Proactive Policing - Vehicle Stop"
+
+# OPD publishes a CSV per year at a predictable path, updated daily. The ArcGIS
+# view starts 2022-01-01, so only the years before that are taken from here --
+# ingesting the overlap would double-count every Omaha incident since 2022.
+OPD_ARCHIVE = "https://police-static.cityofomaha.org/crime-data/{y}/Incidents_{y}.csv"
+OPD_ARCHIVE_YEARS = range(2015, 2022)
+OPD_ARCHIVE_COLUMNS = ("RB Number", "Reported Date", "Reported Time",
+                       "Statute/Ordinance Description", "Occurred Location",
+                       "Occurred District", "Occurred Block LAT",
+                       "Occurred Block LON")
 
 OVERPASS = "https://overpass-api.de/api/interpreter"
 # Douglas and Sarpy counties in Nebraska plus Council Bluffs across the river.
@@ -298,30 +311,46 @@ def ingest_cbpd(conn, since):
     return upsert(conn, rows)
 
 
-def ingest_opd_csv(conn, _since):
-    """Backfill the 2015-2023 CSV archive. Statute text goes to offense_desc;
-    category stays NULL because it is not a NIBRS category."""
-    rows = []
-    for path in sorted((ROOT / "raw_data").glob("Incidents_*.csv")):
-        with path.open(newline="") as fh:
-            if fh.readline().startswith("version https://git-lfs"):
-                print(f"  {path.name}: git-lfs pointer, run 'git lfs pull'")
+def ingest_opd_archive(conn, _since):
+    """Load OPD's yearly incident CSVs for the years the ArcGIS view predates.
+
+    Keyed on a hash of the row rather than its position in the file: these are
+    closed years and should be stable, but a single row inserted upstream would
+    otherwise shift every key below it and file fifty thousand false
+    amendments."""
+    rows, seen = [], {}
+    for year in OPD_ARCHIVE_YEARS:
+        url = OPD_ARCHIVE.format(y=year)
+        req = urllib.request.Request(url, headers={"User-Agent": "omaha-incidents/1.0"})
+        with urllib.request.urlopen(req, timeout=180, context=SSL_CTX) as r:
+            text = r.read().decode("utf-8-sig", "replace")
+        reader = csv.DictReader(text.splitlines())
+        if tuple(reader.fieldnames or ()) != OPD_ARCHIVE_COLUMNS:
+            print(f"  {year}: unexpected columns {reader.fieldnames}")
+            continue
+        n = 0
+        for rec in reader:
+            when = f"{rec['Reported Date']} {rec['Reported Time']}"
+            try:
+                occurred = datetime.strptime(when, "%m/%d/%Y %H:%M:%S")
+            except ValueError:
                 continue
-            fh.seek(0)
-            for i, r in enumerate(csv.reader(fh)):
-                if len(r) < 8 or r[0] == "RB Number":
-                    continue
-                rb, date, tm, desc, loc, district, lat, lon = r[:8]
-                try:
-                    when = datetime.strptime(f"{date} {tm}", "%m/%d/%Y %H:%M")
-                except ValueError:
-                    continue
-                rows.append((("opd_csv", f"{path.stem}:{i}", "Omaha PD", rb,
-                              when.strftime("%Y-%m-%dT%H:%M:%S"), None, None,
-                              None, desc, 0, loc,
-                              float(lat) if lat else None,
-                              float(lon) if lon else None),
-                             json.dumps(r)))
+            raw = json.dumps(rec, sort_keys=True)
+            # a few rows repeat verbatim; number them so each keeps its own key
+            h = hashlib.blake2b(raw.encode(), digest_size=8).hexdigest()
+            # No raw kept: unlike the rolling feeds, whose aged-out records can
+            # never be fetched again, these year files stay downloadable. The
+            # one field not carried into a column is Occurred District.
+            seen[h] = seen.get(h, 0) + 1
+            lat, lon = rec["Occurred Block LAT"], rec["Occurred Block LON"]
+            rows.append(((
+                "opd_archive", f"{h}:{seen[h]}", "Omaha PD", rec["RB Number"],
+                occurred.strftime("%Y-%m-%dT%H:%M:%S"), None, None, None,
+                rec["Statute/Ordinance Description"], 0,
+                rec["Occurred Location"],
+                float(lat) if lat else None, float(lon) if lon else None), None))
+            n += 1
+        print(f"    {year}: {n}", end="\r", file=sys.stderr, flush=True)
     return upsert(conn, rows)
 
 
@@ -443,7 +472,7 @@ SOURCES = {
     "cbpd": ingest_cbpd,
     "alpr": ingest_alpr,
     "flock": ingest_flock,
-    "opd_csv": ingest_opd_csv,
+    "opd_archive": ingest_opd_archive,
 }
 
 
@@ -454,7 +483,7 @@ def main():
                    help="default: opd sarpy cbpd alpr flock")
     p.add_argument("--since-days", type=int, default=30,
                    help="only pull incidents this recent (default 30); "
-                        "ignored by alpr, flock and opd_csv")
+                        "ignored by alpr, flock and opd_archive")
     p.add_argument("--full", action="store_true",
                    help="pull the complete feed instead of --since-days")
     p.add_argument("--import-flock", metavar="CSV",
