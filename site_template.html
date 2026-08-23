@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omaha Metro Police Activity</title>
+<meta name="description" content="Police incidents, vehicle stops and ALPR camera surveillance across the Omaha metro, from the agencies' own published feeds.">
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f6f5f3;
+  --surface-1: #fcfcfb;
+  --border:    #dedcd6;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #78766f;
+  --grid:      #e8e6e1;
+  --outline:   #c9c6bd;
+  --series-1:  #2a78d6;
+  --series-2:  #eb6834;
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec;
+  --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border:    #34342f;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #96958c;
+    --grid:      #2c2c28;
+    --outline:   #45443e;
+    --series-1:  #3987e5;
+    --series-2:  #d95926;
+    --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf;
+    --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.02em; }
+h2 { font-size: 1.15rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+p  { margin: 0 0 1rem; color: var(--text-secondary); max-width: 68ch; }
+.lede { font-size: 1.05rem; }
+.stamp { color: var(--text-muted); font-size: .85rem; }
+section { margin: 3rem 0 0; }
+.note { font-size: .875rem; color: var(--text-muted); max-width: 68ch; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.1rem 1.2rem; margin-top: .9rem;
+}
+.tiles { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 1.5rem; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
+.tile b { display: block; font-size: 1.65rem; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.tile span { display: block; font-size: .8rem; color: var(--text-muted); margin-top: .1rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .85rem; color: var(--text-secondary); margin: .1rem 0 .8rem; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: .4rem; vertical-align: -1px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--text-secondary); font-size: 11px; }
+svg .axis-line { stroke: var(--border); stroke-width: 1; }
+svg .grid-line { stroke: var(--grid); stroke-width: 1; }
+svg .val { fill: var(--text-primary); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .cat { fill: var(--text-primary); font-size: 12px; }
+.small-mult { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.sm h3 { font-size: .85rem; margin: 0 0 .1rem; font-weight: 600; }
+.sm .sub { font-size: .75rem; color: var(--text-muted); margin-bottom: .2rem; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: .35rem .6rem; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-muted); font-weight: 600; }
+details { margin-top: .8rem; }
+summary { cursor: pointer; font-size: .85rem; color: var(--text-secondary); }
+#tip {
+  position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px;
+  padding: .4rem .6rem; font-size: .8rem; color: var(--text-primary);
+  box-shadow: 0 4px 14px rgba(0,0,0,.16); z-index: 9; max-width: 260px;
+  font-variant-numeric: tabular-nums;
+}
+.bar-track { fill: var(--grid); }
+.hit { fill: transparent; }
+footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: .85rem; color: var(--text-muted); }
+footer a { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div id="tip" role="status" aria-live="polite"></div>
+<div class="wrap">
+<h1>Omaha Metro Police Activity</h1>
+<p class="lede" id="lede"></p>
+<p class="stamp" id="stamp"></p>
+
+<div class="tiles" id="tiles"></div>
+
+<section>
+  <h2>Vehicle stop outcomes</h2>
+  <p>What share of each agency's officer-initiated vehicle stops ended in a citation, and what share in an arrest.</p>
+  <div class="card">
+    <div class="legend" id="lg-out"></div>
+    <div id="c-outcomes"></div>
+  </div>
+  <p class="note">The two CAD systems record outcomes differently. Sarpy County writes <code>WRITTEN WARNING</code> and <code>CITATION</code> explicitly; Council Bluffs folds most non-citation outcomes into &ldquo;Handled by Officer.&rdquo; An agency that records warnings less thoroughly shows a higher citation rate for that reason alone. Omaha PD publishes no stop or disposition data at all and is absent here.</p>
+  <details><summary>Show the numbers</summary><div id="t-outcomes"></div></details>
+</section>
+
+<section>
+  <h2>Distance to the nearest ALPR camera</h2>
+  <p>Where vehicle stops happen relative to automated licence plate readers, against every other kind of incident as a baseline. Both lines are shares of their own series, so the gap is what matters.</p>
+  <div class="card">
+    <div class="legend" id="lg-prox"></div>
+    <div id="c-prox"></div>
+  </div>
+  <p class="note"><strong>This is not evidence that cameras cause stops.</strong> Cameras get mounted on arterial roads and arterial roads are where traffic enforcement happens, so the two concentrate together for reasons that have nothing to do with each other. It is a starting point for asking the agencies a question, not an answer. That question has a stated standard: all three metro Flock transparency portals list <em>traffic enforcement</em> under prohibited uses.</p>
+  <details><summary>Show the numbers</summary><div id="t-prox"></div></details>
+</section>
+
+<section>
+  <h2>Where stops and cameras sit</h2>
+  <p>Vehicle stops aggregated onto a grid, with every mapped ALPR camera drawn on top.</p>
+  <div class="card">
+    <div class="legend" id="lg-map"></div>
+    <div id="c-map"></div>
+  </div>
+  <p class="note">Outlines are city limits from Douglas County and Sarpy County GIS, with the Douglas County line dashed. Council Bluffs sits in Pottawattamie County, Iowa, which publishes neither, so it has no outline. Omaha is blank because Omaha PD publishes no stop data &mdash; the empty area is a gap in what the city reports, not an absence of stops. Camera locations come from OpenStreetMap, mapped by volunteers through the DeFlock project, and are certainly incomplete: Council Bluffs, Sarpy County and Douglas County together report 89 cameras on their own portals, and those three are not the only agencies running them.</p>
+</section>
+
+<section>
+  <h2>ALPR searches</h2>
+  <div id="searches"></div>
+</section>
+
+<section>
+  <h2>Reported volume by agency</h2>
+  <p>Incidents per week, each agency on its own scale. Omaha PD's record begins in 2022; the Sarpy County and Council Bluffs feeds each serve a rolling twelve months, so their history starts when this archive started keeping it.</p>
+  <div class="small-mult" id="c-weekly"></div>
+</section>
+
+<section>
+  <h2>What is and is not here</h2>
+  <div class="card"><div id="t-coverage"></div></div>
+  <p class="note"><strong>Ralston PD publishes no machine-readable feed and does not appear anywhere on this page.</strong> Gretna and Springfield appear in the Sarpy County feed as fire departments only; their police departments do not report to it. Each feed uses its own incident taxonomy and none of them are comparable to each other, so nothing here counts &ldquo;crime&rdquo; across agencies &mdash; only what each agency itself published.</p>
+</section>
+
+<footer>
+  <p>Built from the agencies' own published feeds: the Omaha Police incident view on DCGIS, the Sarpy County PublicCrimeMap, the Council Bluffs public calls-for-service feed, and the Flock Safety transparency portals. Camera locations from OpenStreetMap contributors, <a href="https://opendatacommons.org/licenses/odbl/">ODbL</a>.</p>
+  <p>The Sarpy County and Council Bluffs feeds keep a rolling twelve months and drop what falls outside it. This archive keeps what they drop. Source and the full database: <a href="https://github.com/krazywarez/omaha-incidents">github.com/krazywarez/omaha-incidents</a>.</p>
+</footer>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const S1 = 'var(--series-1)', S2 = 'var(--series-2)';
+const fmt = n => n.toLocaleString('en-US');
+const pct = (v, d = 1) => (v * 100).toFixed(d) + '%';
+const tip = document.getElementById('tip');
+
+function showTip(evt, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - pad;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.style.opacity = 0; };
+function hoverable(el, html) {
+  el.addEventListener('mousemove', e => showTip(e, html));
+  el.addEventListener('mouseleave', hideTip);
+}
+const el = (tag, attrs = {}, kids = []) => {
+  const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  kids.forEach(c => n.appendChild(c));
+  return n;
+};
+function legend(id, items) {
+  document.getElementById(id).innerHTML = items
+    .map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
+}
+function table(id, cols, rows) {
+  document.getElementById(id).innerHTML =
+    '<table><thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') +
+    '</tr></thead><tbody>' + rows.map(r => '<tr>' +
+      r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}
+
+/* ---- tiles ---- */
+(function () {
+  const t = DATA.totals;
+  document.getElementById('lede').textContent =
+    `${fmt(t.incidents)} incidents and ${fmt(t.stops)} officer-initiated vehicle stops from six law` +
+    ` enforcement agencies, against ${fmt(t.cameras)} mapped licence plate readers and` +
+    ` ${fmt(t.searches)} published searches of one agency's camera network.`;
+  document.getElementById('stamp').textContent = 'Rebuilt ' + t.built + '.';
+  const tiles = [
+    [fmt(t.incidents), 'Incidents'], [fmt(t.stops), 'Vehicle stops'],
+    [fmt(t.cameras), 'ALPR cameras'], [fmt(t.searches), 'Published searches'],
+    [fmt(t.raw), 'Raw payloads kept'],
+  ];
+  document.getElementById('tiles').innerHTML = tiles
+    .map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join('');
+})();
+
+/* ---- stop outcomes: grouped horizontal bars ---- */
+(function () {
+  const d = DATA.outcomes;
+  if (!d.length) return;
+  legend('lg-out', [[S1, 'Cited'], [S2, 'Arrested']]);
+  const W = 720, rowH = 52, padL = 150, padR = 64, top = 8;
+  const H = top + d.length * rowH + 26;
+  const max = Math.max(...d.map(r => r.cited)) * 1.12;
+  const x = v => padL + (v / max) * (W - padL - padR);
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': 'Citation and arrest rate on vehicle stops, by agency' });
+
+  [0, .2, .4, .6].forEach(g => {
+    if (g > max) return;
+    svg.appendChild(el('line', { class: 'grid-line', x1: x(g), x2: x(g), y1: top, y2: top + d.length * rowH }));
+    const tx = el('text', { x: x(g), y: H - 8, 'text-anchor': 'middle' });
+    tx.textContent = pct(g, 0); svg.appendChild(tx);
+  });
+
+  d.forEach((r, i) => {
+    const yTop = top + i * rowH;
+    const name = el('text', { x: padL - 12, y: yTop + 26, 'text-anchor': 'end', class: 'cat' });
+    name.textContent = r.agency; svg.appendChild(name);
+    // 2px surface gap between the paired bars
+    [['cited', S1, yTop + 8, 15], ['arrested', S2, yTop + 25, 15]].forEach(([k, col, y, h]) => {
+      const w = Math.max(x(r[k]) - padL, 0);
+      const bar = el('rect', { x: padL, y, width: w, height: h, rx: 4, fill: col });
+      svg.appendChild(bar);
+      const lab = el('text', { x: padL + w + 8, y: y + h - 3, class: 'val' });
+      lab.textContent = pct(r[k], k === 'arrested' ? 2 : 1);
+      svg.appendChild(lab);
+      const hit = el('rect', { class: 'hit', x: padL, y: y - 2, width: W - padL, height: h + 4 });
+      svg.appendChild(hit);
+      hoverable(hit, `<b>${r.agency}</b><br>${k === 'cited' ? 'Cited' : 'Arrested'}: ` +
+        `${pct(r[k], 2)} of ${fmt(r.stops)} stops`);
+    });
+  });
+  document.getElementById('c-outcomes').appendChild(svg);
+  table('t-outcomes', ['Agency', 'Stops', 'Cited', 'Arrested'],
+    d.map(r => [r.agency, fmt(r.stops), pct(r.cited), pct(r.arrested, 2)]));
+})();
+
+/* ---- distance to nearest camera: two lines + crosshair ---- */
+(function () {
+  const d = DATA.proximity;
+  if (!d.length) return;
+  legend('lg-prox', [[S2, 'Vehicle stops'], [S1, 'All other incidents']]);
+  const W = 720, H = 300, padL = 52, padR = 96, padT = 12, padB = 44;
+  const maxY = Math.max(...d.map(r => Math.max(r.stops, r.other))) * 1.1;
+  const maxX = Math.max(...d.map(r => r.m));
+  const x = v => padL + (v / maxX) * (W - padL - padR);
+  const y = v => H - padB - (v / maxY) * (H - padT - padB);
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': 'Share of incidents by distance to the nearest ALPR camera' });
+
+  for (let g = 0; g <= maxY; g += 0.04) {
+    svg.appendChild(el('line', { class: 'grid-line', x1: padL, x2: W - padR, y1: y(g), y2: y(g) }));
+    const t = el('text', { x: padL - 10, y: y(g) + 4, 'text-anchor': 'end' });
+    t.textContent = pct(g, 0); svg.appendChild(t);
+  }
+  d.forEach(r => {
+    const t = el('text', { x: x(r.m), y: H - padB + 18, 'text-anchor': 'middle' });
+    t.textContent = r.m; svg.appendChild(t);
+  });
+  const ax = el('text', { x: (padL + W - padR) / 2, y: H - 6, 'text-anchor': 'middle' });
+  ax.textContent = 'metres to the nearest camera'; svg.appendChild(ax);
+
+  const path = (key, col) => {
+    const dstr = d.map((r, i) => `${i ? 'L' : 'M'}${x(r.m)},${y(r[key])}`).join(' ');
+    svg.appendChild(el('path', { d: dstr, fill: 'none', stroke: col,
+      'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    d.forEach(r => svg.appendChild(el('circle', { cx: x(r.m), cy: y(r[key]), r: 4,
+      fill: col, stroke: 'var(--surface-1)', 'stroke-width': 2 })));
+    const last = d[d.length - 1];
+    const lab = el('text', { x: x(last.m) + 10, y: y(last[key]) + 4, class: 'val' });
+    lab.textContent = key === 'stops' ? 'stops' : 'other'; svg.appendChild(lab);
+  };
+  path('other', S1); path('stops', S2);
+
+  const cross = el('line', { class: 'axis-line', y1: padT, y2: H - padB, opacity: 0 });
+  svg.appendChild(cross);
+  const band = el('rect', { class: 'hit', x: padL, y: padT, width: W - padL - padR, height: H - padT - padB });
+  svg.appendChild(band);
+  band.addEventListener('mousemove', e => {
+    const box = svg.getBoundingClientRect();
+    const vx = (e.clientX - box.left) / box.width * W;
+    let best = d[0];
+    d.forEach(r => { if (Math.abs(x(r.m) - vx) < Math.abs(x(best.m) - vx)) best = r; });
+    cross.setAttribute('x1', x(best.m)); cross.setAttribute('x2', x(best.m));
+    cross.setAttribute('opacity', 1);
+    showTip(e, `<b>${best.m}–${best.m + (d[1] ? d[1].m - d[0].m : 200)} m</b><br>` +
+      `Vehicle stops: ${pct(best.stops)}<br>All other: ${pct(best.other)}`);
+  });
+  band.addEventListener('mouseleave', () => { cross.setAttribute('opacity', 0); hideTip(); });
+  document.getElementById('c-prox').appendChild(svg);
+  table('t-prox', ['Distance (m)', 'Vehicle stops', 'All other incidents'],
+    d.map(r => [r.m, pct(r.stops, 2), pct(r.other, 2)]));
+})();
+
+/* ---- map: stop-density grid + cameras ---- */
+(function () {
+  const m = DATA.map;
+  if (!m || !m.cells.length) return;
+  const seq = ['--seq-1', '--seq-2', '--seq-3', '--seq-4', '--seq-5', '--seq-6'].map(v => `var(${v})`);
+  legend('lg-map', [[seq[1], 'Fewer stops'], [seq[5], 'More stops'], [S2, 'ALPR camera'],
+    ['var(--outline)', 'City limits, Douglas County line']]);
+  // bounds must cover the cameras too, or they render outside the frame
+  const lats = m.cells.map(c => c[0]).concat(m.cameras.map(c => c[0]));
+  const lons = m.cells.map(c => c[1]).concat(m.cameras.map(c => c[1]));
+  const lat0 = Math.min(...lats) - m.cell, lat1 = Math.max(...lats) + m.cell * 2;
+  const lon0 = Math.min(...lons) - m.cell, lon1 = Math.max(...lons) + m.cell * 2;
+  const k = Math.cos((lat0 + lat1) / 2 * Math.PI / 180);
+  const W = 900, H = Math.round(W * (lat1 - lat0) / ((lon1 - lon0) * k));
+  const x = lon => (lon - lon0) / (lon1 - lon0) * W;
+  const y = lat => H - (lat - lat0) / (lat1 - lat0) * H;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': 'Map of vehicle stop density with ALPR camera locations' });
+  const clip = el('clipPath', { id: 'mapclip' });
+  clip.appendChild(el('rect', { x: 0, y: 0, width: W, height: H, rx: 6 }));
+  svg.appendChild(clip);
+  svg.appendChild(el('rect', { x: 0, y: 0, width: W, height: H, fill: 'var(--surface-0)', rx: 6 }));
+  const plot = el('g', { 'clip-path': 'url(#mapclip)' });
+  svg.appendChild(plot);
+
+  const counts = m.cells.map(c => c[2]).sort((a, b) => a - b);
+  const q = p => counts[Math.floor(p * (counts.length - 1))];
+  const breaks = [q(.4), q(.65), q(.82), q(.93), q(.98)];
+  const colour = n => seq[breaks.filter(b => n > b).length];
+  // outlines first, so the data sits on top of them
+  (m.boundaries || []).forEach(b => {
+    const d = b.rings.map(r => r.map((pt, i) =>
+      `${i ? 'L' : 'M'}${x(pt[0]).toFixed(1)},${y(pt[1]).toFixed(1)}`).join(' ') + 'Z').join(' ');
+    plot.appendChild(el('path', { d, fill: 'none', stroke: 'var(--outline)',
+      'stroke-width': b.kind === 'county' ? 1.6 : 1,
+      'stroke-linejoin': 'round',
+      'stroke-dasharray': b.kind === 'county' ? '6 4' : 'none' }));
+  });
+
+  const cw = x(lon0 + m.cell) - x(lon0), ch = y(lat0) - y(lat0 + m.cell);
+  m.cells.forEach(([la, lo, n]) => {
+    const r = el('rect', { x: x(lo), y: y(la + m.cell), width: Math.max(cw - 1, 1),
+      height: Math.max(ch - 1, 1), fill: colour(n), rx: 1 });
+    plot.appendChild(r);
+    hoverable(r, `${fmt(n)} vehicle stops in this cell`);
+  });
+  m.cameras.forEach(([la, lo]) => {
+    const c = el('circle', { cx: x(lo), cy: y(la), r: 4.5, fill: S2,
+      stroke: 'var(--surface-0)', 'stroke-width': 2 });
+    plot.appendChild(c);
+    hoverable(c, 'ALPR camera<br>' + la.toFixed(4) + ', ' + lo.toFixed(4));
+  });
+  [['Omaha', 41.257, -95.995], ['Council Bluffs', 41.262, -95.861],
+   ['Bellevue', 41.137, -95.914], ['Papillion', 41.155, -96.043],
+   ['La Vista', 41.183, -96.031], ['Ralston', 41.205, -96.043]].forEach(([n, la, lo]) => {
+    if (la < lat0 || la > lat1 || lo < lon0 || lo > lon1) return;
+    const t = el('text', { x: x(lo), y: y(la), 'text-anchor': 'middle', class: 'cat' });
+    t.setAttribute('stroke', 'var(--surface-0)'); t.setAttribute('stroke-width', '3');
+    t.setAttribute('paint-order', 'stroke'); t.textContent = n;
+    plot.appendChild(t);
+  });
+  document.getElementById('c-map').appendChild(svg);
+})();
+
+/* ---- search audit ---- */
+(function () {
+  const s = DATA.searches, host = document.getElementById('searches');
+  if (!s) { host.innerHTML = '<p>No search audit has been collected yet.</p>'; return; }
+  const missing = s.searches - s.with_reason;
+  host.innerHTML =
+    `<p>Council Bluffs PD publishes every search run against its camera network for the ` +
+    `trailing 30 days. Between ${s.first} and ${s.last} there were <b>${fmt(s.searches)}</b>. ` +
+    `Its own access policy states that all system access requires a valid reason.</p>` +
+    `<div class="card">` +
+      `<div class="legend"><span><i style="background:${S2}"></i>Search recorded a reason</span>` +
+      `<span><i style="background:var(--grid)"></i>No reason recorded</span></div>` +
+      `<div id="c-reason"></div>` +
+      `<p class="note" style="margin:.7rem 0 0">${fmt(s.with_reason)} of ${fmt(s.searches)} searches ` +
+      `carried any reason at all. The reasons that exist are free text, often a single word. ` +
+      `The user id is redacted by Flock before publication, so no search here can be attributed ` +
+      `to a person.</p>` +
+    `</div>` +
+    `<p style="margin-top:1.4rem">Each search reaches across a sharing network of other agencies' ` +
+    `cameras. The median search touched <b>${fmt(s.median_networks)}</b> networks; the largest ` +
+    `touched <b>${fmt(s.max_networks)}</b>.</p>` +
+    `<div class="card"><div id="c-net"></div></div>` +
+    `<details><summary>Most common stated reasons</summary><div id="t-reasons"></div></details>`;
+
+  const W = 720, H = 46;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': 'Share of searches recording a reason' });
+  const w1 = W * s.reason_rate;
+  svg.appendChild(el('rect', { class: 'bar-track', x: 0, y: 0, width: W, height: 26, rx: 4 }));
+  svg.appendChild(el('rect', { x: 0, y: 0, width: w1, height: 26, rx: 4, fill: S2 }));
+  const l1 = el('text', { x: 0, y: H - 4, class: 'val' });
+  l1.textContent = `${fmt(s.with_reason)} with a reason (${pct(s.reason_rate)})`;
+  svg.appendChild(l1);
+  const l2 = el('text', { x: W, y: H - 4, 'text-anchor': 'end', class: 'val' });
+  l2.textContent = `${fmt(missing)} without`;
+  svg.appendChild(l2);
+  document.getElementById('c-reason').appendChild(svg);
+
+  // keep empty bins: dropping them would compress the axis and hide the gap
+  const h = s.histogram;
+  const NW = 720, NH = 210, padL = 8, padB = 40;
+  const nmax = Math.max(...h.map(b => b.n));
+  const bw = (NW - padL) / h.length;
+  const nsvg = el('svg', { viewBox: `0 0 ${NW} ${NH}`, role: 'img',
+    'aria-label': 'Searches by number of camera networks reached' });
+  h.forEach((b, i) => {
+    const bh = (b.n / nmax) * (NH - padB - 16);
+    const bx = padL + i * bw, by = NH - padB - bh;
+    const r = el('rect', { x: bx + 2, y: by, width: bw - 6, height: bh, rx: 4, fill: S1 });
+    nsvg.appendChild(r);
+    hoverable(r, `<b>${fmt(b.n)} searches</b><br>reached ${fmt(b.lo + 1)}–${fmt(b.hi)} networks`);
+    const v = el('text', { x: bx + bw / 2 - 2, y: by - 6, 'text-anchor': 'middle', class: 'val' });
+    v.textContent = b.n ? fmt(b.n) : ''; nsvg.appendChild(v);
+    const t = el('text', { x: bx + bw / 2 - 2, y: NH - padB + 18, 'text-anchor': 'middle' });
+    t.textContent = b.hi >= 10000 ? '2500+' : fmt(b.hi); nsvg.appendChild(t);
+  });
+  const nx = el('text', { x: NW / 2, y: NH - 8, 'text-anchor': 'middle' });
+  nx.textContent = 'camera networks reached by the search (upper bound of each band)';
+  nsvg.appendChild(nx);
+  document.getElementById('c-net').appendChild(nsvg);
+  table('t-reasons', ['Stated reason', 'Searches'], s.reasons.map(r => [r.reason, r.n]));
+})();
+
+/* ---- weekly small multiples ---- */
+(function () {
+  const w = DATA.weekly, host = document.getElementById('c-weekly');
+  Object.keys(w).sort((a, b) => {
+    const sa = w[a].counts.reduce((x, y) => x + y, 0), sb = w[b].counts.reduce((x, y) => x + y, 0);
+    return sb - sa;
+  }).forEach(agency => {
+    const g = w[agency];
+    if (g.counts.length < 2) return;
+    const W = 260, H = 74;
+    const max = Math.max(...g.counts);
+    const x = i => (i / (g.counts.length - 1)) * W;
+    const y = v => H - 4 - (v / max) * (H - 12);
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+      'aria-label': `Weekly incidents reported by ${agency}` });
+    svg.appendChild(el('path', {
+      d: g.counts.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '),
+      fill: 'none', stroke: S1, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+    const hit = el('rect', { class: 'hit', x: 0, y: 0, width: W, height: H });
+    svg.appendChild(hit);
+    hit.addEventListener('mousemove', e => {
+      const box = svg.getBoundingClientRect();
+      const i = Math.round((e.clientX - box.left) / box.width * (g.counts.length - 1));
+      const j = Math.max(0, Math.min(g.counts.length - 1, i));
+      showTip(e, `<b>${agency}</b><br>week of ${g.weeks[j]}<br>${fmt(g.counts[j])} incidents`);
+    });
+    hit.addEventListener('mouseleave', hideTip);
+    const box = document.createElement('div');
+    box.className = 'sm card';
+    box.innerHTML = `<h3>${agency}</h3><div class="sub">${g.weeks[0]} → ` +
+      `${g.weeks[g.weeks.length - 1]} &middot; peak ${fmt(max)}/wk</div>`;
+    box.appendChild(svg);
+    host.appendChild(box);
+  });
+})();
+
+/* ---- coverage table ---- */
+table('t-coverage', ['Agency', 'Incidents', 'Vehicle stops', 'From', 'To'],
+  DATA.agencies.map(a => [a.agency, fmt(a.incidents),
+    a.stops ? fmt(a.stops) : '—', a.first, a.last]));
+</script>
+</body>
+</html>

@@ -45,6 +45,28 @@ USE
       .venv/bin/python ingest.py opd_csv       # 2015-2023 csv archive
       .venv/bin/python app.py
 
+SITE
+  build_site.py precomputes every figure into one self-contained
+  site/index.html -- no server, no fetch, no dependencies, 38 kb of
+  data. the workflow rebuilds it after each pull and deploys it to
+  github pages. app.py stays as the exploration tool; it needs a live
+  process and refilters 300k rows per interaction, which is fine for
+  one person and wrong for the public.
+
+      .venv/bin/python build_site.py && open site/index.html
+
+  the map's outlines come from raw_data/boundaries.geojson: douglas
+  county city limits and boundary, plus sarpy county municipal
+  boundaries. static reference geometry, so refreshing it is a rare
+  manual step rather than part of the daily pull.
+
+      .venv/bin/python fetch_boundaries.py
+
+  pottawattamie county, iowa publishes neither, so council bluffs is
+  unoutlined. douglas county sheriff publishes no incident or calls
+  feed at all -- only a flock portal with counts -- so the area
+  inside omaha's limits carries cameras and no stops.
+
 ARCHIVE
   .github/workflows/daily-pull.yml runs at 11:17 and 23:17 utc and
   keeps the database as metro.db.gz on the "archive" release, so the
@@ -107,7 +129,9 @@ FLOCK SEARCH AUDIT
   overlapping exports dedupe and re-importing the same window is a
   no-op.
 
-  the portals keep 30 days. miss a month and that month is gone.
+  the portals keep 30 days. miss a month and that month is gone, so
+  the workflow warns at 21 days since the last export and fails the
+  run at 27, while there is still time to act.
 
   as of the first export, 100 of 442 council bluffs searches carried
   any reason at all, against an access policy stating that all access
