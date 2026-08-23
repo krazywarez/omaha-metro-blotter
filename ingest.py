@@ -8,6 +8,12 @@ Sources:
   cbpd    Council Bluffs PD public CFS feed, rolling 12-month window, refreshed
           every 10 minutes. Same ageing-out caveat as sarpy.
   alpr    ALPR cameras from OpenStreetMap via Overpass (the data behind DeFlock).
+  flock   Search audits exported from the agencies' Flock transparency portals.
+          Cloudflare serves every non-browser client a challenge, so these are
+          not fetchable from here: save the portal's "Download CSV" into
+          raw_data/flock/<portal-slug>_<date>.csv and this reads what is there.
+          The portals keep a rolling 30 days, so a gap longer than that is
+          permanent.
   opd_csv One-time backfill of raw_data/Incidents_*.csv (2015-2023). Statute text
           only, no NIBRS category.
 
@@ -319,6 +325,35 @@ def ingest_opd_csv(conn, _since):
     return upsert(conn, rows)
 
 
+FLOCK_COLUMNS = ("id", "userId", "searchDate", "networkCount", "reason")
+
+
+def ingest_flock(conn, _since):
+    """Load Flock transparency-portal search audits from raw_data/flock.
+
+    The agency comes from the filename, since the export itself does not name
+    it. Search ids are stable UUIDs, so re-importing overlapping exports is
+    what keeps the archive whole across the portal's 30-day window."""
+    now = datetime.now(LOCAL).strftime("%Y-%m-%dT%H:%M:%S")
+    rows = []
+    for path in sorted((ROOT / "raw_data" / "flock").glob("*.csv")):
+        agency = path.stem.split("_")[0]
+        with path.open(newline="") as fh:
+            reader = csv.DictReader(fh)
+            if tuple(reader.fieldnames or ()) != FLOCK_COLUMNS:
+                print(f"  {path.name}: unexpected columns {reader.fieldnames}")
+                continue
+            for r in reader:
+                rows.append((agency, r["id"], r["searchDate"],
+                             int(r["networkCount"]) if r["networkCount"] else None,
+                             r["reason"].strip() or None, r["userId"], now))
+    conn.executemany(
+        """INSERT OR IGNORE INTO alpr_searches
+           (agency, search_id, searched_at, network_count, reason, user_id,
+            imported_at) VALUES (?,?,?,?,?,?,?)""", rows)
+    return len(rows), 0
+
+
 def ingest_alpr(conn, _since):
     payload = get(OVERPASS, {"data": OVERPASS_QUERY})
     now = datetime.now(LOCAL).strftime("%Y-%m-%dT%H:%M:%S")
@@ -379,6 +414,7 @@ SOURCES = {
     "sarpy": ingest_sarpy,
     "cbpd": ingest_cbpd,
     "alpr": ingest_alpr,
+    "flock": ingest_flock,
     "opd_csv": ingest_opd_csv,
 }
 
@@ -387,14 +423,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("sources", nargs="*", choices=list(SOURCES),
-                   help="default: opd sarpy cbpd alpr")
+                   help="default: opd sarpy cbpd alpr flock")
     p.add_argument("--since-days", type=int, default=30,
                    help="only pull incidents this recent (default 30); "
-                        "ignored by alpr and opd_csv")
+                        "ignored by alpr, flock and opd_csv")
     p.add_argument("--full", action="store_true",
                    help="pull the complete feed instead of --since-days")
     args = p.parse_args()
-    sources = args.sources or ["opd", "sarpy", "cbpd", "alpr"]
+    sources = args.sources or ["opd", "sarpy", "cbpd", "alpr", "flock"]
 
     since = None if args.full else datetime.now(timezone.utc) - timedelta(days=args.since_days)
 

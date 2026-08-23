@@ -79,8 +79,14 @@ jobs:
               "SELECT source || '+raw', COUNT(*) FROM raw_records
                GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
             sqlite3 -noheader -separator ' ' "$DB" \
+              "SELECT agency || '+search', COUNT(*) FROM alpr_searches
+               GROUP BY agency ORDER BY agency" >> before.txt 2>/dev/null || true
+            sqlite3 -noheader -separator ' ' "$DB" \
               "SELECT source || '+raw', COUNT(*) FROM raw_records
                GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
+            sqlite3 -noheader -separator ' ' "$DB" \
+              "SELECT agency || '+search', COUNT(*) FROM alpr_searches
+               GROUP BY agency ORDER BY agency" >> before.txt 2>/dev/null || true
           fi
           cat before.txt
 
@@ -107,6 +113,9 @@ jobs:
           sqlite3 -noheader -separator ' ' "$DB" \
             "SELECT source || '+raw', COUNT(*) FROM raw_records
              GROUP BY source ORDER BY source" >> after.txt
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT agency || '+search', COUNT(*) FROM alpr_searches
+             GROUP BY agency ORDER BY agency" >> after.txt
           cat after.txt
           test -s after.txt || { echo "::error::archive is empty"; exit 1; }
           # Keyed on FILENAME, not NR == FNR: before.txt is empty on a bootstrap

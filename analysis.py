@@ -158,6 +158,23 @@ def changed_stop_outcomes(conn):
             ORDER BY a.seen_at DESC""", conn)
 
 
+def search_audit(conn):
+    """Per-agency summary of ALPR searches from the Flock transparency portals.
+
+    reason is free text the searching officer typed, and most searches have
+    none despite the portals stating that access requires one. user_id is
+    redacted upstream, so nothing here attributes a search to a person."""
+    return pd.read_sql_query(
+        """SELECT agency,
+                  COUNT(*) AS searches,
+                  SUM(reason IS NOT NULL) AS with_reason,
+                  1.0 * SUM(reason IS NOT NULL) / COUNT(*) AS reason_rate,
+                  CAST(AVG(network_count) AS INT) AS avg_networks,
+                  MAX(network_count) AS max_networks,
+                  MIN(searched_at) AS earliest, MAX(searched_at) AS latest
+             FROM alpr_searches GROUP BY agency ORDER BY searches DESC""", conn)
+
+
 def agency_options(conn):
     rows = conn.execute(
         "SELECT agency, COUNT(*) FROM incidents_current GROUP BY agency"
