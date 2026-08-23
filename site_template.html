@@ -112,12 +112,14 @@ footer a { color: var(--text-secondary); }
 
 <section>
   <h2>Distance to the nearest ALPR camera</h2>
-  <p>Where vehicle stops happen relative to automated licence plate readers, against every other kind of incident as a baseline. Both lines are shares of their own series, so the gap is what matters.</p>
+  <p>Where vehicle stops happen relative to automated licence plate readers, against every other call handled by <em>the same agencies</em> as a baseline. Both lines are shares of their own series, so the gap between them is what matters.</p>
   <div class="card">
     <div class="legend" id="lg-prox"></div>
     <div id="c-prox"></div>
   </div>
-  <p class="note"><strong>This is not evidence that cameras cause stops.</strong> Cameras get mounted on arterial roads and arterial roads are where traffic enforcement happens, so the two concentrate together for reasons that have nothing to do with each other. It is a starting point for asking the agencies a question, not an answer. That question has a stated standard: all three metro Flock transparency portals list <em>traffic enforcement</em> under prohibited uses.</p>
+  <p class="note"><strong>The two lines nearly overlap, and that is the finding.</strong> Stops sit marginally closer to cameras than the same agencies' other calls &mdash; 14.7% against 12.4% within 200&nbsp;m &mdash; but the median distance is 805&nbsp;m for stops and 780&nbsp;m for everything else. There is no meaningful separation here.</p>
+  <p class="note">Comparing stops against <em>every</em> incident in the archive instead produces a much larger gap, 2.6&times; within 200&nbsp;m. That gap is an artifact: most of the archive is Omaha, a city that reports no stops at all, so the comparison was measuring the difference between two geographies rather than between stops and other calls. Restricting the baseline to the five agencies that actually report stops removes it.</p>
+  <p class="note">All three metro Flock transparency portals list <em>traffic enforcement</em> under prohibited uses. On this measure, at this resolution, nothing here contradicts that. It is a weak instrument &mdash; cameras and enforcement both concentrate on arterial roads, and camera locations are volunteer-mapped and incomplete &mdash; so it cannot clear an agency either.</p>
   <details><summary>Show the numbers</summary><div id="t-prox"></div></details>
 </section>
 

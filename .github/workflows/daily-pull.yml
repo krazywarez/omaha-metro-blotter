@@ -99,7 +99,9 @@ jobs:
           if [ "${{ inputs.full }}" = "true" ] || [ "${{ inputs.bootstrap }}" = "true" ] \
              || [ "$(date -u +%u)" = "7" ]; then
             echo "full sweep"
-            python ingest.py --full
+            # opd_archive is closed years that never change; the weekly sweep is
+            # often enough to notice if OPD ever restates one.
+            python ingest.py --full opd sarpy cbpd alpr flock opd_archive
           else
             python ingest.py
           fi

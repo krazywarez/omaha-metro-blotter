@@ -180,9 +180,14 @@ NOTES
   fact does not work: swapping a maplibre basemap at runtime leaves
   it rebuilding with no data layers.
 
-  the camera-proximity panel compares stops against a non-stop
-  baseline. cameras and stops both concentrate on arterials, so a
-  gap between the curves is a starting point, not a finding.
+  the camera-proximity panel compares stops against other calls from
+  the same agencies. the baseline has to be restricted that way: run
+  against the whole archive it shows stops 2.6x more likely to be
+  within 200m of a camera, but most of the archive is omaha, which
+  reports no stops, so that number measures geography rather than
+  enforcement. like for like it is 1.19x, and median distance is
+  805m for stops against 780m for everything else -- no meaningful
+  separation.
 
   raw_data/ingress.db is the old 2015-2023 sqlite build. nothing
   reads it any more.
