@@ -93,10 +93,19 @@ FLOCK SEARCH AUDIT
 
   cloudflare serves a challenge to every non-browser client, so
   ingest.py cannot fetch it. collecting is manual: open the portal,
-  "download csv", save it as raw_data/flock/<slug>_<date>.csv and
-  commit. loading is not manual -- the flock source runs in the daily
-  job and picks up whatever is committed. search ids are stable
-  uuids, so overlapping exports dedupe.
+  click "download csv", then
+
+      .venv/bin/python ingest.py --import-flock ~/Downloads/public_search_audit.csv
+
+  which checks the columns, files it under the right slug and loads
+  it. commit what it writes. every export is named
+  public_search_audit.csv with the agency nowhere inside, so pass
+  --agency for any portal other than council bluffs.
+
+  loading is not manual -- the flock source runs in the daily job and
+  picks up whatever is committed. search ids are stable uuids, so
+  overlapping exports dedupe and re-importing the same window is a
+  no-op.
 
   the portals keep 30 days. miss a month and that month is gone.
 

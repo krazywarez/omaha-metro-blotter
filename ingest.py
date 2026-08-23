@@ -326,6 +326,34 @@ def ingest_opd_csv(conn, _since):
 
 
 FLOCK_COLUMNS = ("id", "userId", "searchDate", "networkCount", "reason")
+FLOCK_DIR = ROOT / "raw_data" / "flock"
+# Council Bluffs is the only metro portal that offers the export at all; Sarpy
+# and Douglas publish counts without one.
+FLOCK_DEFAULT_AGENCY = "council-bluffs-ia-pd"
+
+
+def import_flock(path, agency):
+    """File a portal download under the name ingest_flock expects.
+
+    The portal names every export public_search_audit.csv, with the agency
+    nowhere in the file, so the slug has to be supplied and is worth printing:
+    getting it wrong silently files one agency's searches under another."""
+    src = Path(path).expanduser()
+    with src.open(newline="") as fh:
+        reader = csv.DictReader(fh)
+        if tuple(reader.fieldnames or ()) != FLOCK_COLUMNS:
+            raise SystemExit(f"  {src.name}: not a Flock search audit "
+                             f"(columns {reader.fieldnames})")
+        rows = list(reader)
+    if not rows:
+        raise SystemExit(f"  {src.name}: no rows")
+    span = f"{min(r['searchDate'] for r in rows)[:10]} to " \
+           f"{max(r['searchDate'] for r in rows)[:10]}"
+    FLOCK_DIR.mkdir(parents=True, exist_ok=True)
+    dest = FLOCK_DIR / f"{agency}_{datetime.now(LOCAL):%Y-%m-%d}.csv"
+    dest.write_bytes(src.read_bytes())
+    print(f"  {len(rows)} searches, {span}")
+    print(f"  filed as {dest.relative_to(ROOT)} under agency '{agency}'")
 
 
 def ingest_flock(conn, _since):
@@ -429,8 +457,18 @@ def main():
                         "ignored by alpr, flock and opd_csv")
     p.add_argument("--full", action="store_true",
                    help="pull the complete feed instead of --since-days")
+    p.add_argument("--import-flock", metavar="CSV",
+                   help="file a Flock portal download into raw_data/flock and "
+                        "load it")
+    p.add_argument("--agency", default=FLOCK_DEFAULT_AGENCY,
+                   help=f"portal slug for --import-flock (default "
+                        f"{FLOCK_DEFAULT_AGENCY})")
     args = p.parse_args()
-    sources = args.sources or ["opd", "sarpy", "cbpd", "alpr", "flock"]
+    if args.import_flock:
+        import_flock(args.import_flock, args.agency)
+        sources = ["flock"]
+    else:
+        sources = args.sources or ["opd", "sarpy", "cbpd", "alpr", "flock"]
 
     since = None if args.full else datetime.now(timezone.utc) - timedelta(days=args.since_days)
 
