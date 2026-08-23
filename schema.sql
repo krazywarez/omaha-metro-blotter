@@ -76,6 +76,19 @@ FROM (
 )
 WHERE rn = 1;
 
+-- What the feed actually served, one row per version, keyed the same way
+-- incident_amendments is. A parse that turns out wrong or a field a feed adds
+-- later can only be applied to history if the bytes were kept, and the feeds
+-- age out, so there is no second chance to fetch them.
+CREATE TABLE IF NOT EXISTS raw_records (
+    source     TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    digest     TEXT NOT NULL,  -- the version of the record this payload produced
+    fetched_at TEXT NOT NULL,
+    payload    TEXT NOT NULL,  -- the feature object as served, JSON
+    PRIMARY KEY (source, source_key, digest)
+);
+
 -- ALPR cameras from OpenStreetMap (ODbL). first_seen/last_seen track when a node
 -- entered and was last present in the Overpass result, so cameras that appear or
 -- are removed are visible over time.

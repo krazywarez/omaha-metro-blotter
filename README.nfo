@@ -40,12 +40,16 @@ USE
       .venv/bin/python app.py
 
 ARCHIVE
-  .github/workflows/daily-pull.yml runs the pull at 11:17 utc and
+  .github/workflows/daily-pull.yml runs at 11:17 and 23:17 utc and
   keeps the database as metro.db.gz on the "archive" release, so the
   archive does not depend on any one machine. each run restores that
   asset, pulls, refuses to publish if any source came back with fewer
   rows than it started with, then uploads and fails loudly if a feed
   has not moved in seven days.
+
+  sundays it sweeps every feed in full instead of the last 30 days,
+  because a 30-day window cannot see an agency amending a record it
+  filed months ago, and omaha does that.
 
   first run: trigger it manually with bootstrap enabled, which pulls
   every feed in full and creates the release. after that the restore
@@ -60,6 +64,19 @@ ARCHIVE
   to run the pull locally instead:
 
       0 6 * * *  cd /path/to/omaha-incidents && .venv/bin/python ingest.py
+
+RAW
+  raw_records keeps the feed's own json for every version of every
+  record, keyed the same way amendments are. a parse that turns out
+  wrong, or a field a feed adds later, can only be applied to history
+  if the bytes were kept, and the rolling feeds mean there is no
+  second chance to fetch them. the payloads already carry fields
+  ingest does not map: council bluffs response times and priority,
+  sarpy case status.
+
+  it costs about 0.7 mb gzipped a day and roughly triples the
+  database: 20 mb published without it, 52 mb with. 319 records
+  predate it and their raw is gone; the feeds no longer serve them.
 
 AMENDMENTS
   agencies edit records after publishing them: a disposition changes,
