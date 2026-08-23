@@ -194,15 +194,18 @@ def digest(values):
 def upsert(conn, rows):
     """Insert records not seen before; file a changed record as an amendment.
 
-    Nothing in incidents is ever updated. A record whose payload differs from
-    the one on file is appended to incident_amendments, so the version the
-    agency published first stays readable next to what it published later."""
+    Takes (values, raw) pairs, where raw is the feature exactly as the feed
+    served it. Nothing in incidents is ever updated: a record whose payload
+    differs from the one on file is appended to incident_amendments, so the
+    version the agency published first stays readable next to what it published
+    later. Every version's raw payload is kept too, so a parse can be redone
+    against what actually arrived."""
     now = datetime.now(LOCAL).strftime("%Y-%m-%dT%H:%M:%S")
-    marks = ",".join("?" * (len(COLUMNS) + 1))
-    staged = [r + (digest(r[2:]),) for r in rows]
+    marks = ",".join("?" * (len(COLUMNS) + 2))
+    staged = [r + (digest(r[2:]), raw) for r, raw in rows]
 
     conn.execute("DROP TABLE IF EXISTS temp.incoming")
-    conn.execute(f"CREATE TEMP TABLE incoming ({','.join(COLUMNS)}, digest)")
+    conn.execute(f"CREATE TEMP TABLE incoming ({','.join(COLUMNS)}, digest, raw)")
     conn.executemany(f"INSERT INTO temp.incoming VALUES ({marks})", staged)
     conn.execute("CREATE INDEX temp.incoming_key ON incoming (source, source_key)")
 
@@ -218,6 +221,14 @@ def upsert(conn, rows):
               ON o.source = i.source AND o.source_key = i.source_key
             WHERE o.digest <> i.digest""", (now,)).rowcount
 
+    # OR IGNORE keyed on the version, so a run that re-serves a known record
+    # stores nothing and the first full run backfills whatever is still served.
+    conn.execute(
+        """INSERT OR IGNORE INTO raw_records (source, source_key, digest,
+                                              fetched_at, payload)
+           SELECT source, source_key, digest, ?, raw FROM temp.incoming
+            WHERE raw IS NOT NULL""", (now,))
+
     conn.execute("DROP TABLE temp.incoming")
     return len(rows), amended
 
@@ -229,9 +240,10 @@ def ingest_opd(conn, since):
         occurred = local_iso(a["dteMidpoint"])
         if occurred is None:
             continue
-        rows.append(("opd", str(a["PK"]), "Omaha PD", a.get("RB"), occurred,
-                     a.get("NIBRSCategory"), None, None, None, 0,
-                     a.get("AddressBlock"), a.get("LatBlock"), a.get("LonBlock")))
+        rows.append((("opd", str(a["PK"]), "Omaha PD", a.get("RB"), occurred,
+                      a.get("NIBRSCategory"), None, None, None, 0,
+                      a.get("AddressBlock"), a.get("LatBlock"), a.get("LonBlock")),
+                     json.dumps(f, sort_keys=True)))
     return upsert(conn, rows)
 
 
@@ -249,11 +261,12 @@ def ingest_sarpy(conn, since):
             unmapped.add(prefix)
             agency = f"Unmapped {prefix}"
         g = f.get("geometry") or {}
-        rows.append(("sarpy", iid, agency, iid, occurred, a.get("Category"),
-                     a.get("CadTypeDesc"), a.get("CadDisposition"),
-                     a.get("StatuteDesc"),
-                     int(a.get("Category") == SARPY_STOP_CATEGORY),
-                     a.get("BlkAddress"), g.get("y"), g.get("x")))
+        rows.append((("sarpy", iid, agency, iid, occurred, a.get("Category"),
+                      a.get("CadTypeDesc"), a.get("CadDisposition"),
+                      a.get("StatuteDesc"),
+                      int(a.get("Category") == SARPY_STOP_CATEGORY),
+                      a.get("BlkAddress"), g.get("y"), g.get("x")),
+                     json.dumps(f, sort_keys=True)))
     result = upsert(conn, rows)
     if unmapped:
         print(f"  unmapped IncidentId prefixes: {sorted(unmapped)}")
@@ -270,11 +283,12 @@ def ingest_cbpd(conn, since):
         g = f.get("geometry") or {}
         code = a.get("incident_code")
         # Council Bluffs withholds the street address; the point is still exact.
-        rows.append(("cbpd", a["cfs_number"], "Council Bluffs PD",
-                     a.get("case_number") or a.get("cfs_number"), occurred,
-                     a.get("incident_category"), code, a.get("disp_code"), None,
-                     int(code == CBPD_STOP_CODE),
-                     None, g.get("y"), g.get("x")))
+        rows.append((("cbpd", a["cfs_number"], "Council Bluffs PD",
+                      a.get("case_number") or a.get("cfs_number"), occurred,
+                      a.get("incident_category"), code, a.get("disp_code"), None,
+                      int(code == CBPD_STOP_CODE),
+                      None, g.get("y"), g.get("x")),
+                     json.dumps(f, sort_keys=True)))
     return upsert(conn, rows)
 
 
@@ -296,11 +310,12 @@ def ingest_opd_csv(conn, _since):
                     when = datetime.strptime(f"{date} {tm}", "%m/%d/%Y %H:%M")
                 except ValueError:
                     continue
-                rows.append(("opd_csv", f"{path.stem}:{i}", "Omaha PD", rb,
-                             when.strftime("%Y-%m-%dT%H:%M:%S"), None, None, None,
-                             desc, 0, loc,
-                             float(lat) if lat else None,
-                             float(lon) if lon else None))
+                rows.append((("opd_csv", f"{path.stem}:{i}", "Omaha PD", rb,
+                              when.strftime("%Y-%m-%dT%H:%M:%S"), None, None,
+                              None, desc, 0, loc,
+                              float(lat) if lat else None,
+                              float(lon) if lon else None),
+                             json.dumps(r)))
     return upsert(conn, rows)
 
 

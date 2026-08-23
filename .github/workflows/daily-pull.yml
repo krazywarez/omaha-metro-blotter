@@ -5,9 +5,11 @@ name: daily pull
 
 on:
   schedule:
-    # 06:00 America/Chicago in summer, 05:00 in winter. Offset from the hour
-    # because GitHub drops on-the-hour scheduled runs under load.
+    # Twice a day, because the cadence sets how much the rolling feeds drop
+    # before it is captured: a five-hour gap cost 13 Sarpy records once.
+    # Offset from the hour, GitHub drops on-the-hour runs under load.
     - cron: "17 11 * * *"
+    - cron: "17 23 * * *"
   workflow_dispatch:
     inputs:
       bootstrap:
@@ -34,7 +36,7 @@ env:
 jobs:
   pull:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +75,22 @@ jobs:
             sqlite3 -noheader -separator ' ' "$DB" \
               "SELECT source || '+amend', COUNT(*) FROM incident_amendments
                GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
+            sqlite3 -noheader -separator ' ' "$DB" \
+              "SELECT source || '+raw', COUNT(*) FROM raw_records
+               GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
+            sqlite3 -noheader -separator ' ' "$DB" \
+              "SELECT source || '+raw', COUNT(*) FROM raw_records
+               GROUP BY source ORDER BY source" >> before.txt 2>/dev/null || true
           fi
           cat before.txt
 
       - name: Pull feeds
         run: |
-          if [ "${{ inputs.full }}" = "true" ] || [ "${{ inputs.bootstrap }}" = "true" ]; then
+          # A 30-day window cannot see an agency amending a record filed months
+          # ago, and OPD does exactly that, so sweep the whole feed on Sundays.
+          if [ "${{ inputs.full }}" = "true" ] || [ "${{ inputs.bootstrap }}" = "true" ] \
+             || [ "$(date -u +%u)" = "7" ]; then
+            echo "full sweep"
             python ingest.py --full
           else
             python ingest.py
@@ -91,6 +103,9 @@ jobs:
             > after.txt
           sqlite3 -noheader -separator ' ' "$DB" \
             "SELECT source || '+amend', COUNT(*) FROM incident_amendments
+             GROUP BY source ORDER BY source" >> after.txt
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT source || '+raw', COUNT(*) FROM raw_records
              GROUP BY source ORDER BY source" >> after.txt
           cat after.txt
           test -s after.txt || { echo "::error::archive is empty"; exit 1; }
@@ -141,7 +156,9 @@ jobs:
             echo "incidents holds each record as first published; every later"
             echo "version the feed served is a row in incident_amendments"
             echo "($(sqlite3 -noheader "$DB" 'SELECT COUNT(*) FROM incident_amendments') so far)."
-            echo "incidents_current is the newest version of each."
+            echo "incidents_current is the newest version of each, and"
+            echo "raw_records keeps the feed's own JSON for every version"
+            echo "so a parse can be redone against what actually arrived."
             echo
             echo '```'
             sqlite3 -header -column "$DB" \
