@@ -128,7 +128,7 @@ def get(url, params, retries=4):
     for attempt in range(retries):
         try:
             req = urllib.request.Request(url, data=body,
-                                         headers={"User-Agent": "omaha-incidents/1.0"})
+                                         headers={"User-Agent": "omaha-metro-blotter/1.0"})
             with urllib.request.urlopen(req, timeout=120, context=SSL_CTX) as r:
                 payload = json.load(r)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
@@ -321,7 +321,7 @@ def ingest_opd_archive(conn, _since):
     rows, seen = [], {}
     for year in OPD_ARCHIVE_YEARS:
         url = OPD_ARCHIVE.format(y=year)
-        req = urllib.request.Request(url, headers={"User-Agent": "omaha-incidents/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "omaha-metro-blotter/1.0"})
         with urllib.request.urlopen(req, timeout=180, context=SSL_CTX) as r:
             text = r.read().decode("utf-8-sig", "replace")
         reader = csv.DictReader(text.splitlines())
