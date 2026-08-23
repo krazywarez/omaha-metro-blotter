@@ -84,6 +84,24 @@ def weekly(conn):
     return out
 
 
+def boundaries():
+    """City limits and the county line, rounded to ~11 m for the wire."""
+    src = ROOT / "raw_data" / "boundaries.geojson"
+    if not src.exists():
+        return []
+    gj = json.loads(src.read_text())
+    out = []
+    for f in gj["features"]:
+        g = f["geometry"]
+        polys = ([g["coordinates"]] if g["type"] == "Polygon"
+                 else g["coordinates"])
+        rings = [[[round(x, 4), round(y, 4)] for x, y in ring]
+                 for poly in polys for ring in poly]
+        out.append({"name": f["properties"]["name"],
+                    "kind": f["properties"]["kind"], "rings": rings})
+    return out
+
+
 def map_layers(conn):
     df = analysis.load_incidents(conn)
     stops = df[df["is_stop"] == 1].dropna(subset=["lat", "lon"])
@@ -95,6 +113,7 @@ def map_layers(conn):
     cams = analysis.load_cameras(conn)
     return {
         "cell": CELL,
+        "boundaries": boundaries(),
         "cells": [[round(r.clat, 4), round(r.clon, 4), int(r.n)]
                   for r in grid.itertuples()],
         "cameras": [[round(r.lat, 5), round(r.lon, 5)] for r in cams.itertuples()],

@@ -15,6 +15,7 @@
   --text-secondary: #52514e;
   --text-muted:     #78766f;
   --grid:      #e8e6e1;
+  --outline:   #c9c6bd;
   --series-1:  #2a78d6;
   --series-2:  #eb6834;
   --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec;
@@ -30,6 +31,7 @@
     --text-secondary: #c3c2b7;
     --text-muted:     #96958c;
     --grid:      #2c2c28;
+    --outline:   #45443e;
     --series-1:  #3987e5;
     --series-2:  #d95926;
     --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf;
@@ -126,7 +128,7 @@ footer a { color: var(--text-secondary); }
     <div class="legend" id="lg-map"></div>
     <div id="c-map"></div>
   </div>
-  <p class="note">Omaha is blank because Omaha PD publishes no stop data &mdash; the empty area is a gap in what the city reports, not an absence of stops. Camera locations come from OpenStreetMap, mapped by volunteers through the DeFlock project, and are certainly incomplete: Council Bluffs, Sarpy County and Douglas County together report 89 cameras on their own portals, and those three are not the only agencies running them.</p>
+  <p class="note">Outlines are city limits from Douglas County and Sarpy County GIS, with the Douglas County line dashed. Council Bluffs sits in Pottawattamie County, Iowa, which publishes neither, so it has no outline. Omaha is blank because Omaha PD publishes no stop data &mdash; the empty area is a gap in what the city reports, not an absence of stops. Camera locations come from OpenStreetMap, mapped by volunteers through the DeFlock project, and are certainly incomplete: Council Bluffs, Sarpy County and Douglas County together report 89 cameras on their own portals, and those three are not the only agencies running them.</p>
 </section>
 
 <section>
@@ -311,7 +313,8 @@ function table(id, cols, rows) {
   const m = DATA.map;
   if (!m || !m.cells.length) return;
   const seq = ['--seq-1', '--seq-2', '--seq-3', '--seq-4', '--seq-5', '--seq-6'].map(v => `var(${v})`);
-  legend('lg-map', [[seq[1], 'Fewer stops'], [seq[5], 'More stops'], [S2, 'ALPR camera']]);
+  legend('lg-map', [[seq[1], 'Fewer stops'], [seq[5], 'More stops'], [S2, 'ALPR camera'],
+    ['var(--outline)', 'City limits, Douglas County line']]);
   // bounds must cover the cameras too, or they render outside the frame
   const lats = m.cells.map(c => c[0]).concat(m.cameras.map(c => c[0]));
   const lons = m.cells.map(c => c[1]).concat(m.cameras.map(c => c[1]));
@@ -334,6 +337,16 @@ function table(id, cols, rows) {
   const q = p => counts[Math.floor(p * (counts.length - 1))];
   const breaks = [q(.4), q(.65), q(.82), q(.93), q(.98)];
   const colour = n => seq[breaks.filter(b => n > b).length];
+  // outlines first, so the data sits on top of them
+  (m.boundaries || []).forEach(b => {
+    const d = b.rings.map(r => r.map((pt, i) =>
+      `${i ? 'L' : 'M'}${x(pt[0]).toFixed(1)},${y(pt[1]).toFixed(1)}`).join(' ') + 'Z').join(' ');
+    plot.appendChild(el('path', { d, fill: 'none', stroke: 'var(--outline)',
+      'stroke-width': b.kind === 'county' ? 1.6 : 1,
+      'stroke-linejoin': 'round',
+      'stroke-dasharray': b.kind === 'county' ? '6 4' : 'none' }));
+  });
+
   const cw = x(lon0 + m.cell) - x(lon0), ch = y(lat0) - y(lat0 + m.cell);
   m.cells.forEach(([la, lo, n]) => {
     const r = el('rect', { x: x(lo), y: y(la + m.cell), width: Math.max(cw - 1, 1),

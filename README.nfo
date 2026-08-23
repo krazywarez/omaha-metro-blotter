@@ -55,6 +55,18 @@ SITE
 
       .venv/bin/python build_site.py && open site/index.html
 
+  the map's outlines come from raw_data/boundaries.geojson: douglas
+  county city limits and boundary, plus sarpy county municipal
+  boundaries. static reference geometry, so refreshing it is a rare
+  manual step rather than part of the daily pull.
+
+      .venv/bin/python fetch_boundaries.py
+
+  pottawattamie county, iowa publishes neither, so council bluffs is
+  unoutlined. douglas county sheriff publishes no incident or calls
+  feed at all -- only a flock portal with counts -- so the area
+  inside omaha's limits carries cameras and no stops.
+
 ARCHIVE
   .github/workflows/daily-pull.yml runs at 11:17 and 23:17 utc and
   keeps the database as metro.db.gz on the "archive" release, so the
