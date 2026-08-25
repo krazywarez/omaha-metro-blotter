@@ -86,6 +86,26 @@ jobs:
         ssh $HOST release asset add $R archive metro.db.gz < metro.db.gz
         ssh $HOST release asset remove $R archive metro.db.new.gz 2>/dev/null || true
         rm metro.db.gz
+        {
+          echo "SQLite archive of Omaha metro police incident feeds, rebuilt twice daily."
+          echo "Sarpy County and Council Bluffs publish a rolling 12-month window,"
+          echo "so this holds records their own feeds no longer serve."
+          echo
+          echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Schema: schema.sql."
+          echo
+          echo "incidents holds each record as first published; every later"
+          echo "version the feed served is a row in incident_amendments"
+          echo "($(sqlite3 -noheader "$DB" 'SELECT COUNT(*) FROM incident_amendments') so far)."
+          echo
+          echo '```'
+          sqlite3 -header -column "$DB" \
+            "SELECT agency, COUNT(*) AS rows, SUM(is_stop) AS stops,
+                    MIN(occurred_at) AS earliest, MAX(occurred_at) AS latest
+             FROM incidents GROUP BY agency ORDER BY rows DESC"
+          echo '```'
+        } > notes.md
+        ssh $HOST "release edit $R archive --title 'Incident archive' --file -" < notes.md
+        rm notes.md
         echo "archive published"
       - |
         set -e
