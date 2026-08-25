@@ -1,0 +1,127 @@
+# Twice-daily archive pull, ported from the GitHub workflow. Sarpy and
+# Council Bluffs serve a rolling 12-month window; records that age out of
+# those feeds exist nowhere else. This job is the only thing keeping them,
+# so it refuses to publish an archive smaller than the one it started with.
+# The archive lives as metro.db.gz on the gitbay release tagged "archive";
+# the site deploys to the pages branch.
+jobs:
+  daily-pull:
+    schedule: "17 11,23 * * *"
+    steps:
+      - python3 -m venv .venv && .venv/bin/pip install -q -r requirements-ingest.txt
+      - |
+        set -e
+        export PATH="$PWD/.venv/bin:$PATH" DB=raw_data/metro.db HOST=git@127.0.0.1 R=krz/omaha-metro-blotter
+        mkdir -p raw_data
+
+        # Restore the published archive; a crashed publish leaves metro.db.new.gz.
+        if ssh $HOST release asset get $R archive metro.db.gz > metro.db.gz 2>/dev/null && [ -s metro.db.gz ]; then
+          :
+        elif ssh $HOST release asset get $R archive metro.db.new.gz > metro.db.gz 2>/dev/null && [ -s metro.db.gz ]; then
+          echo "recovered from interrupted publish"
+        else
+          echo "ERROR: no metro.db.gz on release 'archive'; aged-out records cannot be recovered"
+          exit 1
+        fi
+        gunzip -c metro.db.gz > "$DB" && rm metro.db.gz
+        echo "restored $(du -h "$DB" | cut -f1)"
+
+        counts() {
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT source, COUNT(*) FROM incidents GROUP BY source ORDER BY source"
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT source || '+amend', COUNT(*) FROM incident_amendments GROUP BY source ORDER BY source" 2>/dev/null || true
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT source || '+raw', COUNT(*) FROM raw_records GROUP BY source ORDER BY source" 2>/dev/null || true
+          sqlite3 -noheader -separator ' ' "$DB" \
+            "SELECT agency || '+search', COUNT(*) FROM alpr_searches GROUP BY agency ORDER BY agency" 2>/dev/null || true
+        }
+        counts > before.txt
+        cat before.txt
+
+        # OPD amends records filed months ago; sweep the whole feed on Sundays.
+        if [ "$(date -u +%u)" = "7" ]; then
+          echo "full sweep"
+          python ingest.py --full opd sarpy cbpd alpr flock opd_archive
+        else
+          python ingest.py
+        fi
+
+        counts > after.txt
+        cat after.txt
+        test -s after.txt || { echo "ERROR: archive is empty"; exit 1; }
+        awk -v first=before.txt '
+             FILENAME == first { was[$1] = $2; next }
+             { now[$1] = $2 }
+             END {
+               for (s in was)
+                 if (now[s] + 0 < was[s] + 0) {
+                   printf "ERROR: %s lost rows: %d -> %d\n", s, was[s], now[s]
+                   bad = 1
+                 }
+               exit bad
+             }' before.txt after.txt
+
+        # An amendment identical to its original means the digest drifted.
+        phantom=$(sqlite3 -noheader "$DB" "
+          SELECT COUNT(*) FROM incident_amendments a
+          JOIN incidents o ON o.source = a.source AND o.source_key = a.source_key
+          WHERE a.agency IS o.agency AND a.case_id IS o.case_id
+            AND a.occurred_at IS o.occurred_at AND a.category IS o.category
+            AND a.call_type IS o.call_type AND a.disposition IS o.disposition
+            AND a.offense_desc IS o.offense_desc AND a.is_stop IS o.is_stop
+            AND a.address IS o.address AND a.lat IS o.lat AND a.lon IS o.lon")
+        if [ "$phantom" -ne 0 ]; then
+          echo "ERROR: $phantom amendments are identical to their original"
+          exit 1
+        fi
+
+        # Publish. The .new asset makes the sequence crash-safe: at every
+        # point at least one asset holds the full archive.
+        sqlite3 "$DB" "VACUUM;"
+        gzip -c "$DB" > metro.db.gz
+        ssh $HOST release asset remove $R archive metro.db.new.gz 2>/dev/null || true
+        ssh $HOST release asset add $R archive metro.db.new.gz < metro.db.gz
+        ssh $HOST release asset remove $R archive metro.db.gz 2>/dev/null || true
+        ssh $HOST release asset add $R archive metro.db.gz < metro.db.gz
+        ssh $HOST release asset remove $R archive metro.db.new.gz 2>/dev/null || true
+        rm metro.db.gz
+        echo "archive published"
+      - |
+        set -e
+        export PATH="$PWD/.venv/bin:$PATH" DB=raw_data/metro.db
+        .venv/bin/pip install -q -r requirements.txt
+        python build_site.py
+        origin=$(git remote get-url origin)
+        cd site && git init -q -b pages
+        git -c user.name=ci -c user.email=ci@gitbay.org add -A
+        git -c user.name=ci -c user.email=ci@gitbay.org commit -q -m "site $(date -u '+%Y-%m-%d %H:%M')"
+        git push -qf "$origin" pages:pages
+        echo "site deployed"
+      - |
+        set -e
+        export DB=raw_data/metro.db
+        # Alarms last, on purpose: a stale feed should fail the build loudly
+        # without having blocked the archive or the site.
+        sqlite3 -noheader "$DB" \
+          "SELECT source || ' ' || MAX(occurred_at) FROM incidents
+           WHERE source IN ('opd', 'sarpy', 'cbpd') GROUP BY source
+           HAVING MAX(occurred_at) < datetime('now', '-7 days')" > stale.txt
+        if [ -s stale.txt ]; then
+          while read -r line; do echo "ERROR: feed is stale: $line"; done < stale.txt
+          exit 1
+        fi
+        echo "all feeds current"
+        age=$(sqlite3 -noheader "$DB" "
+          SELECT CAST(julianday('now') - julianday(MAX(imported_at)) AS INT)
+            FROM alpr_searches" 2>/dev/null || echo "")
+        if [ -z "$age" ]; then echo "no Flock export on file yet"; exit 0; fi
+        echo "newest Flock export imported $age days ago"
+        if [ "$age" -ge 27 ]; then
+          echo "ERROR: Flock search audit is $age days old and the portal only keeps 30."
+          echo "Download it from https://transparency.flocksafety.com/council-bluffs-ia-pd"
+          echo "and commit it to raw_data/flock/ before the window closes."
+          exit 1
+        elif [ "$age" -ge 21 ]; then
+          echo "WARNING: Flock search audit is $age days old; refresh it soon."
+        fi
