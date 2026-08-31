@@ -1,0 +1,213 @@
+#+title: omaha metro blotter
+
+* what
+an archive of police activity and alpr surveillance across the
+omaha metro, pulled from the agencies' own feeds. sarpy county,
+council bluffs and the flock portals all serve rolling windows and
+delete what falls outside them; this keeps it.
+
+* coverage
+#+begin_example
+omaha pd                dcgis arcgis view, 2022-01-01 onward,
+                        nibrs offence records, updated daily.
+                        no stop or disposition data.
+bellevue pd             sarpy county publiccrimemap, cad calls
+papillion pd            for service with stop type, disposition
+la vista pd             and category. rolling 12-month window:
+sarpy county so         records age out of the feed, so the local
+                        archive is the only long-term copy. gretna
+                        and springfield appear as fire only; their
+                        police departments do not report to it.
+council bluffs pd       cbpd public cfs feed, refreshed every ten
+                        minutes, rolling 12-month window. stop
+                        type, disposition, priority, response time.
+                        street addresses withheld; points exact.
+ralston pd              no machine-readable feed. absent.
+#+end_example
+
+#+begin_example
+alpr cameras            openstreetmap via overpass, the same data
+                        deflock renders. 169 nodes in the metro
+                        bbox. odbl, attribution required.
+#+end_example
+
+#+begin_example
+alpr searches           flock transparency portals. council bluffs
+                        publishes a downloadable 30-day search
+                        audit; sarpy county and douglas county
+                        publish counts but no export. omaha pd has
+                        no portal.
+#+end_example
+
+* setup
+#+begin_src sh
+uv venv .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+#+end_src
+
+* use
+#+begin_src sh
+.venv/bin/python ingest.py --full        # first run, backfill
+.venv/bin/python ingest.py               # daily, last 30 days
+.venv/bin/python ingest.py cbpd sarpy    # one source at a time
+.venv/bin/python ingest.py opd_archive   # omaha 2015-2021 backfill
+.venv/bin/python app.py
+#+end_src
+
+* site
+build_site.py precomputes every figure into one self-contained
+site/index.html -- no server, no fetch, no dependencies, 38 kb of
+data. the workflow rebuilds it after each pull and deploys it to
+github pages. app.py stays as the exploration tool; it needs a live
+process and refilters 300k rows per interaction, which is fine for
+one person and wrong for the public.
+
+#+begin_src sh
+.venv/bin/python build_site.py && open site/index.html
+#+end_src
+
+the map's outlines come from raw_data/boundaries.geojson: douglas
+county city limits and boundary, plus sarpy county municipal
+boundaries. static reference geometry, so refreshing it is a rare
+manual step rather than part of the daily pull.
+
+#+begin_src sh
+.venv/bin/python fetch_boundaries.py
+#+end_src
+
+pottawattamie county, iowa publishes neither, so council bluffs is
+unoutlined. douglas county sheriff publishes no incident or calls
+feed at all -- only a flock portal with counts -- so the area
+inside omaha's limits carries cameras and no stops.
+
+* archive
+.github/workflows/daily-pull.yml runs at 11:17 and 23:17 utc and
+keeps the database as metro.db.gz on the "archive" release, so the
+archive does not depend on any one machine. each run restores that
+asset, pulls, refuses to publish if any source came back with fewer
+rows than it started with, then uploads and fails loudly if a feed
+has not moved in seven days.
+
+sundays it sweeps every feed in full instead of the last 30 days,
+because a 30-day window cannot see an agency amending a record it
+filed months ago, and omaha does that.
+
+first run: trigger it manually with bootstrap enabled, which pulls
+every feed in full and creates the release. after that the restore
+step is mandatory -- a bootstrap over a live archive throws away
+whatever has already aged out of the sarpy and council bluffs
+feeds.
+
+github disables scheduled workflows after 60 days without repo
+activity, and emails first. that is the most likely way this stops
+quietly.
+
+to run the pull locally instead:
+
+#+begin_src sh
+0 6 * * *  cd /path/to/omaha-metro-blotter && .venv/bin/python ingest.py
+#+end_src
+
+* raw
+raw_records keeps the feed's own json for every version of every
+record, keyed the same way amendments are. a parse that turns out
+wrong, or a field a feed adds later, can only be applied to history
+if the bytes were kept, and the rolling feeds mean there is no
+second chance to fetch them. the payloads already carry fields
+ingest does not map: council bluffs response times and priority,
+sarpy case status.
+
+it costs about 0.7 mb gzipped a day and roughly triples the
+database: 20 mb published without it, 52 mb with. 319 records
+predate it and their raw is gone; the feeds no longer serve them.
+
+* flock search audit
+transparency.flocksafety.com/<slug> publishes camera counts, plate
+reads, search counts and each agency's sharing network. council
+bluffs also offers the search audit itself as a csv: one row per
+search, with a timestamp, how many camera networks it reached and
+a free-text reason.
+
+cloudflare serves a challenge to every non-browser client, so
+ingest.py cannot fetch it. collecting is manual: open the portal,
+click "download csv", then
+
+#+begin_src sh
+.venv/bin/python ingest.py --import-flock ~/Downloads/public_search_audit.csv
+#+end_src
+
+which checks the columns, files it under the right slug and loads
+it. commit what it writes. every export is named
+public_search_audit.csv with the agency nowhere inside, so pass
+--agency for any portal other than council bluffs.
+
+loading is not manual -- the flock source runs in the daily job and
+picks up whatever is committed. search ids are stable uuids, so
+overlapping exports dedupe and re-importing the same window is a
+no-op.
+
+the portals keep 30 days. miss a month and that month is gone, so
+the workflow warns at 21 days since the last export and fails the
+run at 27, while there is still time to act.
+
+as of the first export, 100 of 442 council bluffs searches carried
+any reason at all, against an access policy stating that all access
+requires one. userid is redacted upstream, so no search can be
+attributed to a person. the median search reached 466 camera
+networks; the largest reached 6072.
+
+all three portals list traffic enforcement under prohibited uses,
+which is what the camera-proximity panel is measuring against.
+
+* amendments
+agencies edit records after publishing them: a disposition changes,
+a case reopens, a record is withdrawn. nothing in the incidents
+table is ever updated, so what an agency published first stays
+readable. every later version the feed serves lands in
+incident_amendments, and incidents_current is the newest version of
+each record. analysis.changed_stop_outcomes() lists stops whose
+disposition changed after filing.
+
+a version is keyed on the hash of its payload, so a record that
+reverts to a payload already on file is not recorded again. this
+holds the set of distinct states observed, not a strict timeline.
+
+the hash has to survive a round trip through sqlite. a lon of -96
+arrives from the feed as a json int and comes back out of a REAL
+column as -96.0, so lat, lon and is_stop are coerced before
+hashing. get this wrong and every affected record is filed as
+amended on every run, forever. the workflow fails if any amendment
+is byte-identical to its original.
+
+* notes
+all three arcgis services return utc epochs; their where-clause
+literals do not agree (opd and council bluffs utc, sarpy central).
+ingest.py stores occurred_at in local time.
+
+each feed has its own taxonomy and none of them are comparable, so
+ingest.py derives one cross-agency flag, is_stop, per source. stop
+outcomes compare citation and arrest rate by substring, which is
+all the two disposition vocabularies support: an agency that
+records warnings less thoroughly shows a higher citation rate for
+that reason alone.
+
+colour scheme follows prefers-color-scheme. plotly writes colours
+into the figure, so assets/theme.js reports the media query into a
+store and app.py builds each figure from it. restyling after the
+fact does not work: swapping a maplibre basemap at runtime leaves
+it rebuilding with no data layers.
+
+the camera-proximity panel compares stops against other calls from
+the same agencies. the baseline has to be restricted that way: run
+against the whole archive it shows stops 2.6x more likely to be
+within 200m of a camera, but most of the archive is omaha, which
+reports no stops, so that number measures geography rather than
+enforcement. like for like it is 1.19x, and median distance is
+805m for stops against 780m for everything else -- no meaningful
+separation.
+
+raw_data/ingress.db is the old 2015-2023 sqlite build. nothing
+reads it any more.
+
+* screenshots
+screenshots/*.png are from the previous 2015-2023 dashboard.
