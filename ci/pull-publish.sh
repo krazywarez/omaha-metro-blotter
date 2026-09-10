@@ -36,7 +36,9 @@ if [ "$(date -u +%u)" = "7" ]; then
   echo "full sweep"
   python ingest.py --full opd sarpy cbpd alpr flock opd_archive
 else
-  python ingest.py
+  # The default set, spelled out: Python 3.14's argparse rejects an empty
+  # list against choices, so a bare call errors before it pulls anything.
+  python ingest.py opd sarpy cbpd alpr flock
 fi
 
 counts > after.txt
