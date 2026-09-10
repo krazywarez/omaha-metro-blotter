@@ -206,8 +206,10 @@ enforcement. like for like it is 1.19x, and median distance is
 805m for stops against 780m for everything else -- no meaningful
 separation.
 
-raw_data/ingress.db is the old 2015-2023 sqlite build. nothing
-reads it any more.
+raw_data/ingress.db, the old 2015-2023 sqlite build, and the yearly
+Incidents_*.csv downloads are gone from the tree: their LFS objects
+survive nowhere, nothing reads them, and ingest.py fetches the city's
+CSVs itself.
 
 * screenshots
 screenshots/*.png are from the previous 2015-2023 dashboard.
