@@ -4,6 +4,12 @@
 # so it refuses to publish an archive smaller than the one it started with.
 # The archive lives as metro.db.gz on the gitbay release tagged "archive";
 # the site deploys to the pages branch.
+#
+# The build runs in a container on the instance's runner, which holds no
+# key of its own inside the container. Publishing goes over SSH as the
+# blotter-ci account (write on this repository): its private key arrives
+# as the BOT_SSH_KEY build secret, is written into the workspace for the
+# build, and ~/.ssh/config points ssh and git at it for gitbay.org.
 jobs:
   daily-pull:
     schedule: "17 11,23 * * *"
@@ -11,7 +17,15 @@ jobs:
       - python3 -m venv .venv && .venv/bin/pip install -q -r requirements-ingest.txt
       - |
         set -e
-        export PATH="$PWD/.venv/bin:$PATH" DB=raw_data/metro.db HOST=git@127.0.0.1 R=krz/omaha-metro-blotter
+        test -n "$BOT_SSH_KEY" || { echo "ERROR: BOT_SSH_KEY secret is not set"; exit 1; }
+        umask 077
+        printf '%s\n' "$BOT_SSH_KEY" > "$PWD/.bot_key"
+        mkdir -p ~/.ssh
+        printf 'Host gitbay.org\n  IdentityFile %s\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' "$PWD/.bot_key" > ~/.ssh/config
+        ssh git@gitbay.org whoami
+      - |
+        set -e
+        export PATH="$PWD/.venv/bin:$PATH" DB=raw_data/metro.db HOST=git@gitbay.org R=krz/omaha-metro-blotter
         mkdir -p raw_data
 
         # Restore the published archive; a crashed publish leaves metro.db.new.gz.
@@ -112,7 +126,7 @@ jobs:
         export PATH="$PWD/.venv/bin:$PATH" DB=raw_data/metro.db
         .venv/bin/pip install -q -r requirements.txt
         python build_site.py
-        origin=$(git remote get-url origin)
+        origin=ssh://git@gitbay.org/krz/omaha-metro-blotter.git
         cd site && git init -q -b pages
         git -c user.name=ci -c user.email=ci@gitbay.org add -A
         git -c user.name=ci -c user.email=ci@gitbay.org commit -q -m "site $(date -u '+%Y-%m-%d %H:%M')"
