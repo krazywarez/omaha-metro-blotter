@@ -403,11 +403,18 @@ def ingest_flock(conn, _since):
             for r in reader:
                 rows.append((agency, r["id"], r["searchDate"],
                              int(r["networkCount"]) if r["networkCount"] else None,
-                             r["reason"].strip() or None, r["userId"], now))
+                             r["reason"].strip() or None, r["userId"],
+                             (r.get("caseNumber") or "").strip() or None,
+                             (r.get("offenseType") or "").strip() or None, now))
+    # imported_at is left alone on conflict: the staleness alarm reads it.
     conn.executemany(
-        """INSERT OR IGNORE INTO alpr_searches
+        """INSERT INTO alpr_searches
            (agency, search_id, searched_at, network_count, reason, user_id,
-            imported_at) VALUES (?,?,?,?,?,?,?)""", rows)
+            case_number, offense_type, imported_at) VALUES (?,?,?,?,?,?,?,?,?)
+           ON CONFLICT (agency, search_id) DO UPDATE SET
+             case_number = COALESCE(excluded.case_number, case_number),
+             offense_type = COALESCE(excluded.offense_type, offense_type)""",
+        rows)
     return len(rows), 0
 
 
@@ -439,6 +446,12 @@ def ingest_alpr(conn, _since):
 def migrate(conn):
     """Add columns introduced after a database was first built. Runs before
     schema.sql so its views and indexes can reference the new columns."""
+    searches = {r[1] for r in conn.execute("PRAGMA table_info(alpr_searches)")}
+    if searches and "case_number" not in searches:
+        conn.execute("ALTER TABLE alpr_searches ADD COLUMN case_number TEXT")
+        conn.execute("ALTER TABLE alpr_searches ADD COLUMN offense_type TEXT")
+        conn.commit()
+
     have = {r[1] for r in conn.execute("PRAGMA table_info(incidents)")}
     if not have:
         return

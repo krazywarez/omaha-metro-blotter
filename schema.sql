@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS alpr_searches (
     network_count INTEGER,        -- camera networks the search reached across
     reason        TEXT,           -- free text, blank on most searches
     user_id       TEXT,           -- redacted upstream
+    case_number   TEXT,           -- absent from exports before 2026-09
+    offense_type  TEXT,           -- absent from exports before 2026-09
     imported_at   TEXT NOT NULL,
     PRIMARY KEY (agency, search_id)
 );
