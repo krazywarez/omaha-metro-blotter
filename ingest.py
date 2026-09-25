@@ -370,7 +370,7 @@ def import_flock(path, agency):
     src = Path(path).expanduser()
     with src.open(newline="") as fh:
         reader = csv.DictReader(fh)
-        if tuple(reader.fieldnames or ()) != FLOCK_COLUMNS:
+        if not set(FLOCK_COLUMNS) <= set(reader.fieldnames or ()):
             raise SystemExit(f"  {src.name}: not a Flock search audit "
                              f"(columns {reader.fieldnames})")
         rows = list(reader)
@@ -397,7 +397,7 @@ def ingest_flock(conn, _since):
         agency = path.stem.split("_")[0]
         with path.open(newline="") as fh:
             reader = csv.DictReader(fh)
-            if tuple(reader.fieldnames or ()) != FLOCK_COLUMNS:
+            if not set(FLOCK_COLUMNS) <= set(reader.fieldnames or ()):
                 print(f"  {path.name}: unexpected columns {reader.fieldnames}")
                 continue
             for r in reader:
