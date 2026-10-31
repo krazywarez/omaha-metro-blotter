@@ -10,9 +10,12 @@
 # blotter-ci account (write on this repository): its private key arrives
 # as the BOT_SSH_KEY build secret and is written into the workspace for
 # the build, beside an ssh config every ssh and git call is pointed at
-# with -F. GITBAY_SSH, set by the runner, is the instance as this build
-# reaches it. Nothing is written outside the workspace, so the job runs
-# the same in a container and on a machine that is somebody's own.
+# with -F. Every call shares one connection (ControlMaster): the runner's
+# network refuses gitbay.org:22 for a while after a burst of new SSH
+# connections, and a publish makes about ten. GITBAY_SSH, set by the
+# runner, is the instance as this build reaches it. Nothing is written
+# outside the workspace, so the job runs the same in a container and on a
+# machine that is somebody's own.
 jobs:
   daily-pull:
     schedule: "17 11,23 * * *"
@@ -24,7 +27,7 @@ jobs:
         test -n "$GITBAY_SSH" || { echo "ERROR: GITBAY_SSH is not set; the runner is too old"; exit 1; }
         umask 077
         printf '%s\n' "$BOT_SSH_KEY" > "$PWD/.bot_key"
-        printf 'IdentityFile %s\nIdentitiesOnly yes\nStrictHostKeyChecking accept-new\nUserKnownHostsFile %s\n' "$PWD/.bot_key" "$PWD/.known_hosts" > "$PWD/.ssh_config"
+        printf 'IdentityFile %s\nIdentitiesOnly yes\nStrictHostKeyChecking accept-new\nUserKnownHostsFile %s\nControlMaster auto\nControlPath %s/.cm-%%C\nControlPersist 10m\n' "$PWD/.bot_key" "$PWD/.known_hosts" "$PWD" > "$PWD/.ssh_config"
         ssh -F "$PWD/.ssh_config" "$GITBAY_SSH" whoami
       - sh ci/pull-publish.sh
       - |
