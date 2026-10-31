@@ -161,7 +161,8 @@ def update_map(agencies, categories, start, end, theme, show_cameras):
             marker={"size": 7, "color": "#ffb300"},
             name="ALPR camera",
             text=[f"{m or 'unknown make'} — {o or 'operator not tagged'}"
-                  for m, o in zip(CAMERAS["manufacturer"], CAMERAS["operator"])],
+                  for m, o in zip(CAMERAS["manufacturer"].fillna(""),
+                                  CAMERAS["operator"].fillna(""))],
             hovertemplate="%{text}<extra>ALPR</extra>"))
     title = f"{MAP_SAMPLE:,}-incident sample" if sampled else f"{len(df):,} incidents"
     fig.update_layout(map={"style": PALETTES[theme]["basemap"], "center": CENTER,
