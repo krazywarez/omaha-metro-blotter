@@ -1,5 +1,7 @@
 #+title: omaha metro blotter
 
+support this project through [[https://github.com/sponsors/ccleberg][github sponsors]].
+
 * what
 an archive of police activity and alpr surveillance across the
 omaha metro, pulled from the agencies' own feeds. sarpy county,
